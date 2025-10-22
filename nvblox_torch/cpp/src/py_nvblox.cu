@@ -68,6 +68,12 @@ TORCH_LIBRARY(pynvblox, m) {
 
   defineMeshClass<PyColorMesh>(m, "ColorMesh");
   defineMeshClass<PyFeatureMesh>(m, "FeatureMesh");
+  m.class_<PyBlockMesh>("BlockMesh")
+      .def(torch::init())
+      .def("vertices", &PyBlockMesh::vertices)
+      .def("triangles", &PyBlockMesh::triangles)
+      .def("vertex_appearances", &PyBlockMesh::vertex_appearances)
+      .def("block_key", &PyBlockMesh::block_key);
 
   m.def("render_depth_image", &renderDepthImage)
       .def("render_depth_and_color_image", &renderDepthAndColorImage);
@@ -315,6 +321,7 @@ TORCH_LIBRARY(pynvblox, m) {
       // Access methods
       .def("get_color_mesh", &Mapper::getColorMesh)
       .def("get_delta_mesh", &Mapper::getDeltaMesh)
+      .def("get_delta_block_mesh", &Mapper::getDeltaBlockMesh)
       .def("get_feature_mesh", &Mapper::getFeatureMesh)
       // File methods
       .def("output_color_mesh_ply", &Mapper::outputColorMeshPly)

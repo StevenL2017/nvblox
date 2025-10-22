@@ -16,7 +16,7 @@ from nvblox_torch.constants import constants
 from nvblox_torch.lib.utils import get_nvblox_torch_class
 from nvblox_torch.layer import TsdfLayer, FeatureLayer, ColorLayer, OccupancyLayer, EsdfLayer
 from nvblox_torch.sdf_query import EsdfQuery
-from nvblox_torch.mesh import ColorMesh, FeatureMesh
+from nvblox_torch.mesh import BlockMesh, ColorMesh, FeatureMesh
 from nvblox_torch.mapper_params import MapperParams
 from nvblox_torch.projective_integrator_types import ProjectiveIntegratorType
 
@@ -261,6 +261,16 @@ class Mapper:
         """
         assert 0 <= mapper_id < len(self._voxel_sizes)
         return ColorMesh(c_mesh=self._c_mapper.get_delta_mesh(mapper_id))
+
+    def get_delta_block_mesh(self, mapper_id: int = 0) -> List[BlockMesh]:
+        """Get the newly updated color mesh blocks as per-block views.
+
+        Args:
+            mapper_id: The mapper to get the color mesh block delta for.
+        """
+        assert 0 <= mapper_id < len(self._voxel_sizes)
+        c_block_meshes = self._c_mapper.get_delta_block_mesh(mapper_id)
+        return [BlockMesh(c_mesh=block) for block in c_block_meshes]
 
     def get_feature_mesh(self, mapper_id: int = 0) -> FeatureMesh:
         """Get the feature mesh for a given mapper.
