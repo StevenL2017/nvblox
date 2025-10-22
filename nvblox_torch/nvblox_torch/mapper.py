@@ -249,6 +249,19 @@ class Mapper:
         assert 0 <= mapper_id < len(self._voxel_sizes)
         return ColorMesh(c_mesh=self._c_mapper.get_color_mesh(mapper_id))
 
+    def get_delta_mesh(self, mapper_id: int = 0) -> ColorMesh:
+        """Get only the newly updated color mesh blocks for a given mapper.
+
+        Args:
+            mapper_id: The mapper to get the color mesh delta for.
+
+        Notes:
+            Call ``update_color_mesh`` prior to this method to ensure the mesh
+            layer reflects the latest TSDF updates.
+        """
+        assert 0 <= mapper_id < len(self._voxel_sizes)
+        return ColorMesh(c_mesh=self._c_mapper.get_delta_mesh(mapper_id))
+
     def get_feature_mesh(self, mapper_id: int = 0) -> FeatureMesh:
         """Get the feature mesh for a given mapper.
 

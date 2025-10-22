@@ -15,6 +15,7 @@
 #include <ATen/ATen.h>
 #include <torch/custom_class.h>
 
+#include <optional>
 #include <nvblox/core/indexing.h>
 #include <nvblox/mapper/mapper.h>
 #include <nvblox/utils/timing.h>
@@ -71,6 +72,9 @@ struct Mapper : torch::CustomClassHolder {
   /// @brief Copies the mesh layer to a single monolith mesh on the CPU.
   /// @return A nvblox Mesh on the CPU.
   c10::intrusive_ptr<pynvblox::PyColorMesh> getColorMesh(long mapper_id = 0);
+  /// @brief Copies only mesh blocks updated since the last delta fetch.
+  /// @return A nvblox Mesh on the CPU containing the delta.
+  c10::intrusive_ptr<pynvblox::PyColorMesh> getDeltaMesh(long mapper_id = 0);
   c10::intrusive_ptr<pynvblox::PyFeatureMesh> getFeatureMesh(
       long mapper_id = 0);
 

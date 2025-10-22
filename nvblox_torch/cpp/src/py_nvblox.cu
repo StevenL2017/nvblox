@@ -314,6 +314,7 @@ TORCH_LIBRARY(pynvblox, m) {
       .def("query_multi_occupancy", &Mapper::queryMultiOccupancy)
       // Access methods
       .def("get_color_mesh", &Mapper::getColorMesh)
+      .def("get_delta_mesh", &Mapper::getDeltaMesh)
       .def("get_feature_mesh", &Mapper::getFeatureMesh)
       // File methods
       .def("output_color_mesh_ply", &Mapper::outputColorMeshPly)
