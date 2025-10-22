@@ -15,7 +15,6 @@
 #include <ATen/ATen.h>
 #include <torch/custom_class.h>
 
-#include <optional>
 #include <nvblox/core/indexing.h>
 #include <nvblox/mapper/mapper.h>
 #include <nvblox/utils/timing.h>

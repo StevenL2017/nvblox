@@ -110,7 +110,6 @@ void Mapper::integrateDepth(torch::Tensor depth_frame_t, torch::Tensor T_L_C_t,
   mapper->integrateDepth(
       masked_view_from_tensor<const float>(depth_frame_t, mask_frame_t), T_L_C,
       camera);
-
 }
 
 void Mapper::integrateColor(torch::Tensor color_frame_t, torch::Tensor T_L_C_t,
@@ -225,12 +224,12 @@ c10::intrusive_ptr<pynvblox::PyColorMesh> Mapper::getDeltaMesh(long mapper_id) {
   CHECK_LT(static_cast<size_t>(mapper_id), mappers_.size());
   CHECK_GE(mapper_id, 0);
 
+  // Serialize delta blocks in the layer
   constexpr float kUnlimitedBandwidth = -1.0F;
   auto mapper = mappers_[mapper_id];
-
-  mapper->serializeSelectedLayers(nvblox::LayerType::kColorMesh,
-                                  kUnlimitedBandwidth,
-                                  nvblox::BlockExclusionParams());
+  mapper->serializeSelectedLayers(
+    nvblox::LayerType::kColorMesh, kUnlimitedBandwidth,
+    nvblox::BlockExclusionParams());
 
   auto serialized_mesh = mapper->serializedColorMeshLayer();
 
