@@ -236,6 +236,30 @@ c10::intrusive_ptr<pynvblox::PyColorMesh> Mapper::getDeltaMesh(long mapper_id) {
   return c10::make_intrusive<pynvblox::PyColorMesh>(serialized_mesh);
 }
 
+std::vector<c10::intrusive_ptr<pynvblox::PyBlockMesh>>
+Mapper::getDeltaBlockMesh(long mapper_id) {
+  CHECK_LT(static_cast<size_t>(mapper_id), mappers_.size());
+  CHECK_GE(mapper_id, 0);
+
+  auto mapper = mappers_[mapper_id];
+  std::vector<nvblox::Index3D> block_indices = mapper->getBlocksToUpdate(
+      nvblox::BlocksToUpdateType::kLayerStreamer,
+      nvblox::UpdateFullLayer::kNo);
+
+  std::vector<c10::intrusive_ptr<pynvblox::PyBlockMesh>> block_meshes;
+  block_meshes.reserve(block_indices.size());
+  for (const nvblox::Index3D& block_index : block_indices) {
+    auto block = mapper->color_mesh_layer().getBlockAtIndex(block_index);
+    if (!block) {
+      continue;
+    }
+    block_meshes.emplace_back(
+        c10::make_intrusive<pynvblox::PyBlockMesh>(block, block_index));
+  }
+
+  return block_meshes;
+}
+
 c10::intrusive_ptr<pynvblox::PyFeatureMesh> Mapper::getFeatureMesh(
     long mapper_id) {
   CHECK_LT(static_cast<size_t>(mapper_id), mappers_.size());

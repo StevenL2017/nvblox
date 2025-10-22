@@ -650,6 +650,16 @@ class Mapper : public MapperBase {
   /// @param blocks Indices that require an update.
   void markBlocksForUpdate(const std::vector<Index3D>& blocks);
 
+  /// @brief Get the esdf, mesh or freespace blocks that need and update.
+  /// @param blocks_to_update_type The type of blocks you want to get the
+  /// vector for.
+  /// @param update_full_layer Whether to return all block indices (for
+  /// updating the full layer) or only the blocks that need an update.
+  /// @return Vector of block indices to update.
+  std::vector<Index3D> getBlocksToUpdate(
+      BlocksToUpdateType blocks_to_update_type,
+      UpdateFullLayer update_full_layer) const;
+
  protected:
   /// Update the freespace layer, with an optional viewpoint.
   void updateFreespace(Time update_time_ms,
@@ -672,16 +682,6 @@ class Mapper : public MapperBase {
   /// Perform preprocessing on a depth image
   const DepthImage& preprocessDepthImageAsync(
       const DepthImageConstView& depth_image);
-
-  /// @brief Get the esdf, mesh or freespace blocks that need and update.
-  /// @param blocks_to_update_type The type of blocks you want to get the
-  /// vector for.
-  /// @param update_full_layer Whether to return all block indices (for
-  /// updating the full layer) or only the blocks that need an update.
-  /// @return Vector of block indices to update.
-  std::vector<Index3D> getBlocksToUpdate(
-      BlocksToUpdateType blocks_to_update_type,
-      UpdateFullLayer update_full_layer) const;
 
   /// @brief Deallocate blocks int the esdf, mesh and freespace layer.
   /// @param blocks_to_clear Vector of blocks to clear.

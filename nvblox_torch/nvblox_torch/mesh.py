@@ -109,6 +109,22 @@ class ColorMesh(Mesh):
         o3d.io.write_triangle_mesh(mesh_fname, o3d_mesh)
 
 
+class BlockMesh(Mesh):
+    """Block-level view of a color mesh."""
+
+    def _create_empty_mesh(self) -> Any:
+        """Block meshes are only created from serialized data."""
+        raise RuntimeError('BlockMesh requires serialized block data.')
+
+    def vertex_colors(self) -> torch.Tensor:
+        """Get per-vertex RGB colors."""
+        return self.vertex_appearances()
+
+    def block_key(self) -> torch.Tensor:
+        """Get the integer block coordinates (x, y, z)."""
+        return self._c_mesh.block_key()
+
+
 class FeatureMesh(Mesh):
     """FeatureMesh class for PyTorch, inheriting from Mesh.
 

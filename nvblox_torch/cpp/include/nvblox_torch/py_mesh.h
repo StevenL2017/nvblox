@@ -21,6 +21,7 @@
 #include <nvblox/core/types.h>
 #include <nvblox/map/common_names.h>
 #include <nvblox/mesh/mesh.h>
+#include <nvblox/mesh/mesh_block.h>
 #include "nvblox/serialization/mesh_serializer_gpu.h"
 
 namespace pynvblox {
@@ -44,5 +45,25 @@ struct PyMesh : torch::CustomClassHolder {
 
 using PyColorMesh = PyMesh<nvblox::Color>;
 using PyFeatureMesh = PyMesh<nvblox::FeatureArray>;
+
+struct PyBlockMesh : torch::CustomClassHolder {
+  using NativeBlockType = nvblox::MeshBlock<nvblox::Color>;
+  using NativeBlockPtr = typename NativeBlockType::Ptr;
+  using NativeBlockConstPtr = typename NativeBlockType::ConstPtr;
+
+  PyBlockMesh();
+  PyBlockMesh(NativeBlockConstPtr block, const nvblox::Index3D& block_index);
+
+  torch::Tensor vertices() const;
+  torch::Tensor triangles() const;
+  torch::Tensor vertex_appearances() const;
+  torch::Tensor block_key() const;
+
+ private:
+  void deepCopyBlock(const NativeBlockConstPtr& block);
+
+  NativeBlockPtr block_;
+  nvblox::Index3D block_index_;
+};
 
 }  // namespace pynvblox

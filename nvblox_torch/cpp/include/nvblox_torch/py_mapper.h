@@ -74,6 +74,8 @@ struct Mapper : torch::CustomClassHolder {
   /// @brief Copies only mesh blocks updated since the last delta fetch.
   /// @return A nvblox Mesh on the CPU containing the delta.
   c10::intrusive_ptr<pynvblox::PyColorMesh> getDeltaMesh(long mapper_id = 0);
+  std::vector<c10::intrusive_ptr<pynvblox::PyBlockMesh>> getDeltaBlockMesh(
+      long mapper_id = 0);
   c10::intrusive_ptr<pynvblox::PyFeatureMesh> getFeatureMesh(
       long mapper_id = 0);
 
