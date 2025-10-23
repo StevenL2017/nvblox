@@ -15,8 +15,12 @@ limitations under the License.
 */
 #include "nvblox/mapper/mapper.h"
 
-#include <iostream>
+#include <algorithm>
+#include <cstddef>
+#include <cmath>
+#include <limits>
 
+#include "nvblox/core/indexing.h"
 #include "nvblox/geometry/bounding_boxes.h"
 #include "nvblox/geometry/bounding_spheres.h"
 #include "nvblox/io/layer_cake_io.h"
@@ -26,6 +30,206 @@ limitations under the License.
 #include "nvblox/utils/rates.h"
 
 namespace nvblox {
+
+namespace {
+
+std::vector<Index3D> filterBlocksWithOcclusion(
+    const std::vector<Index3D>& blocks_to_clear_pre,
+    TsdfLayer* tsdf_layer_ptr, const float block_size,
+    const MaskedDepthImageConstView& depth_frame,
+    const Transform& T_L_C, const Camera& camera,
+    CudaStream* cuda_stream) {
+  std::vector<Index3D> blocks_to_clear;
+  if (blocks_to_clear_pre.empty()) {
+    return blocks_to_clear;
+  }
+  CHECK_NOTNULL(tsdf_layer_ptr);
+  CHECK_NOTNULL(cuda_stream);
+
+  const Transform T_C_L = T_L_C.inverse();
+  const Eigen::Matrix3f rotation_C_L = T_C_L.rotation();
+  const Eigen::Vector3f translation_C_L = T_C_L.translation();
+  const int image_rows = depth_frame.rows();
+  const int image_cols = depth_frame.cols();
+  const float half_block = 0.5f * block_size;
+  constexpr float kOcclusionEpsilon = 1e-4f;
+
+  DepthImage depth_frame_host(MemoryType::kHost);
+  depth_frame_host.copyFromAsync(depth_frame, *cuda_stream);
+
+  const bool has_mask = depth_frame.hasMask();
+  const MaskMode mask_mode = depth_frame.mode();
+  MonoImage mask_host(MemoryType::kHost);
+  if (has_mask) {
+    mask_host.copyFromAsync(depth_frame.mask(), *cuda_stream);
+  }
+
+  cuda_stream->synchronize();
+
+  auto pixel_is_active = [&](int row, int col) -> bool {
+    if (!has_mask) {
+      return true;
+    }
+    const uint8_t mask_value = mask_host(row, col);
+    if (mask_mode == MaskMode::kNonInverted) {
+      return mask_value != 0;
+    }
+    return mask_value == 0;
+  };
+
+  blocks_to_clear.reserve(blocks_to_clear_pre.size());
+  for (const Index3D& block_index : blocks_to_clear_pre) {
+    if (!tsdf_layer_ptr->isBlockAllocated(block_index)) {
+      continue;
+    }
+
+    const Vector3f block_center_L =
+        getCenterPositionFromBlockIndex(block_size, block_index);
+
+    float min_col = static_cast<float>(camera.width());
+    float max_col = 0.0f;
+    float min_row = static_cast<float>(camera.height());
+    float max_row = 0.0f;
+    float block_far_depth = -std::numeric_limits<float>::infinity();
+    bool has_projected_corner = false;
+
+    for (int dx = -1; dx <= 1; dx += 2) {
+      for (int dy = -1; dy <= 1; dy += 2) {
+        for (int dz = -1; dz <= 1; dz += 2) {
+          const Vector3f corner_L =
+              block_center_L +
+              Vector3f(dx * half_block, dy * half_block, dz * half_block);
+          const Vector3f corner_C = rotation_C_L * corner_L + translation_C_L;
+
+          block_far_depth = std::max(block_far_depth, corner_C.z());
+          if (corner_C.z() <= 0.0f) {
+            continue;
+          }
+
+          has_projected_corner = true;
+          const float inv_z = 1.0f / corner_C.z();
+          const float col = camera.fu() * corner_C.x() * inv_z + camera.cu();
+          const float row = camera.fv() * corner_C.y() * inv_z + camera.cv();
+
+          min_col = std::min(min_col, col);
+          max_col = std::max(max_col, col);
+          min_row = std::min(min_row, row);
+          max_row = std::max(max_row, row);
+        }
+      }
+    }
+
+    if (!has_projected_corner || !std::isfinite(block_far_depth) ||
+        block_far_depth <= 0.0f) {
+      continue;
+    }
+
+    min_col =
+        std::clamp(min_col, 0.0f, static_cast<float>(image_cols - 1));
+    max_col =
+        std::clamp(max_col, 0.0f, static_cast<float>(image_cols - 1));
+    min_row =
+        std::clamp(min_row, 0.0f, static_cast<float>(image_rows - 1));
+    max_row =
+        std::clamp(max_row, 0.0f, static_cast<float>(image_rows - 1));
+
+    if (max_col < min_col || max_row < min_row) {
+      continue;
+    }
+
+    const int min_col_px = static_cast<int>(std::floor(min_col));
+    const int max_col_px = static_cast<int>(std::ceil(max_col));
+    const int min_row_px = static_cast<int>(std::floor(min_row));
+    const int max_row_px = static_cast<int>(std::ceil(max_row));
+
+    bool occluded = false;
+    bool has_free_measurement = false;
+    for (int row = min_row_px; row <= max_row_px && !occluded; ++row) {
+      const int clamped_row = std::clamp(row, 0, image_rows - 1);
+      for (int col = min_col_px; col <= max_col_px; ++col) {
+        const int clamped_col = std::clamp(col, 0, image_cols - 1);
+
+        if (!pixel_is_active(clamped_row, clamped_col)) {
+          continue;
+        }
+
+        const float depth_value =
+            depth_frame_host(clamped_row, clamped_col);
+        if (!std::isfinite(depth_value) || depth_value <= 0.0f) {
+          continue;
+        }
+
+        if (depth_value <= block_far_depth + kOcclusionEpsilon) {
+          occluded = true;
+          break;
+        }
+
+        has_free_measurement = true;
+      }
+    }
+
+    if (occluded) {
+      continue;
+    }
+
+    if (has_free_measurement) {
+      blocks_to_clear.push_back(block_index);
+    }
+  }
+
+  return blocks_to_clear;
+}
+
+}  // namespace
+
+std::vector<Index3D> Mapper::collectBlocksToClear(
+    const Transform& T_L_C, const Camera& camera,
+    TsdfLayer* tsdf_layer_ptr, const std::vector<Index3D>& updated_blocks,
+    const MaskedDepthImageConstView& depth_image_for_integration) {
+  std::vector<Index3D> blocks_to_clear;
+  if (tsdf_layer_ptr == nullptr) {
+    return blocks_to_clear;
+  }
+
+  const float block_size = tsdf_layer_ptr->block_size();
+  float max_distance = tsdf_integrator_.max_integration_distance_m();
+  if (max_distance <= 0.0f) {
+    max_distance = tsdf_integrator_.get_truncation_distance_m(voxel_size_m_);
+  }
+
+  std::vector<Index3D> frustum_blocks =
+      tsdf_integrator_.view_calculator().getBlocksInViewPlanes(
+          T_L_C, camera, block_size, max_distance);
+
+  std::vector<Index3D> blocks_in_view;
+  blocks_in_view.reserve(frustum_blocks.size());
+  for (const Index3D& block_index : frustum_blocks) {
+    if (tsdf_layer_ptr->isBlockAllocated(block_index)) {
+      blocks_in_view.push_back(block_index);
+    }
+  }
+
+  Index3DSet updated_block_set(updated_blocks.begin(), updated_blocks.end());
+  std::vector<Index3D> candidate_blocks;
+  candidate_blocks.reserve(blocks_in_view.size());
+  for (const Index3D& block_index : blocks_in_view) {
+    if (updated_block_set.find(block_index) == updated_block_set.end()) {
+      candidate_blocks.push_back(block_index);
+    }
+  }
+
+  std::vector<Index3D> blocks_to_clear_pre;
+  blocks_to_clear_pre.reserve(candidate_blocks.size());
+  for (const Index3D& candidate : candidate_blocks) {
+    if (tsdf_layer_ptr->isBlockAllocated(candidate)) {
+      blocks_to_clear_pre.push_back(candidate);
+    }
+  }
+
+  return filterBlocksWithOcclusion(blocks_to_clear_pre, tsdf_layer_ptr,
+                                   block_size, depth_image_for_integration,
+                                   T_L_C, camera, cuda_stream_.get());
+}
 
 Mapper::Mapper(float voxel_size_m,
                BlockMemoryPoolParams block_memory_pool_params,
@@ -374,47 +578,9 @@ void Mapper::integrateDepth(const MaskedDepthImageConstView& depth_frame,
         tsdf_layer_ptr, &updated_blocks);
 
     if (clear_unobserved_blocks_in_fov_) {
-      const float block_size = tsdf_layer_ptr->block_size();
-      float max_distance = tsdf_integrator_.max_integration_distance_m();
-      if (max_distance <= 0.0f) {
-        max_distance =
-            tsdf_integrator_.get_truncation_distance_m(voxel_size_m_);
-      }
-
-      std::vector<Index3D> frustum_blocks =
-          tsdf_integrator_.view_calculator().getBlocksInViewPlanes(
-              T_L_C, camera, block_size, max_distance);
-
-      std::vector<Index3D> blocks_in_view;
-      blocks_in_view.reserve(frustum_blocks.size());
-      for (const Index3D& block_index : frustum_blocks) {
-        if (tsdf_layer_ptr->isBlockAllocated(block_index)) {
-          blocks_in_view.push_back(block_index);
-        }
-      }
-
-      Index3DSet updated_block_set(updated_blocks.begin(),
-                                   updated_blocks.end());
-      std::vector<Index3D> candidate_blocks;
-      candidate_blocks.reserve(blocks_in_view.size());
-      for (const Index3D& block_index : blocks_in_view) {
-        if (updated_block_set.find(block_index) == updated_block_set.end()) {
-          candidate_blocks.push_back(block_index);
-        }
-      }
-
-      std::vector<Index3D> blocks_to_clear;
-      blocks_to_clear.reserve(candidate_blocks.size());
-      for (const Index3D& candidate : candidate_blocks) {
-        if (tsdf_layer_ptr->isBlockAllocated(candidate)) {
-          blocks_to_clear.push_back(candidate);
-        }
-      }
-
-      // std::cout << "clear_unobserved_blocks_in_fov sizes -- view: "
-      //           << blocks_in_view.size()
-      //           << ", candidates: " << candidate_blocks.size()
-      //           << ", to_clear: " << blocks_to_clear.size() << std::endl;
+      std::vector<Index3D> blocks_to_clear =
+          collectBlocksToClear(T_L_C, camera, tsdf_layer_ptr, updated_blocks,
+                               depth_image_for_integration);
 
       if (!blocks_to_clear.empty()) {
         tsdf_layer_ptr->clearBlocksAsync(blocks_to_clear, *cuda_stream_);
