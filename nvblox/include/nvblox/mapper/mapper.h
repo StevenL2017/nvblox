@@ -584,6 +584,15 @@ class Mapper : public MapperBase {
     exclude_last_view_from_decay_ = exclude_last_view_from_decay;
   }
 
+  /// Whether to clear unobserved TSDF blocks within the current field of view.
+  bool clear_unobserved_blocks_in_fov() const {
+    return clear_unobserved_blocks_in_fov_;
+  }
+  /// Setter for clear_unobserved_blocks_in_fov().
+  void clear_unobserved_blocks_in_fov(bool clear_unobserved_blocks_in_fov) {
+    clear_unobserved_blocks_in_fov_ = clear_unobserved_blocks_in_fov;
+  }
+
   /// Saving and loading functions.
   /// Saving a map will serialize the TSDF and ESDF layers to a file.
   ///@param filename
@@ -742,6 +751,8 @@ class Mapper : public MapperBase {
   /// Whether to exclude the last depth frustum from the decay
   bool exclude_last_view_from_decay_ =
       kExcludeLastViewFromDecayParamDesc.default_value;
+  bool clear_unobserved_blocks_in_fov_ =
+      kClearUnobservedBlocksInFovParamDesc.default_value;
   /// Last known depth viewpoint for view-based decay exclusion
   std::optional<DepthImage> last_depth_image_;
   std::optional<Camera> last_depth_camera_;

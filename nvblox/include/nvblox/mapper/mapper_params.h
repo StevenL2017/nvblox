@@ -47,6 +47,11 @@ constexpr Param<bool>::Description kExcludeLastViewFromDecayParamDesc{
     "Whether contributions from the last depth frame should be excluded when "
     "decaying"};
 
+constexpr Param<bool>::Description kClearUnobservedBlocksInFovParamDesc{
+    "clear_unobserved_blocks_in_fov", false,
+    "Whether to clear TSDF blocks in the current field of view that were not "
+    "updated by the current depth frame."};
+
 /// A structure containing the mapper parameters. This object can be used to set
 /// all parameters of a mapper.
 struct MapperParams {
@@ -54,6 +59,8 @@ struct MapperParams {
   Param<int> depth_preprocessing_num_dilations{
       kDepthPreprocessingNumDilationsParamDesc};
   Param<bool> exclude_last_view_from_decay{kExcludeLastViewFromDecayParamDesc};
+  Param<bool> clear_unobserved_blocks_in_fov{
+      kClearUnobservedBlocksInFovParamDesc};
 
   EsdfIntegratorParams esdf_integrator_params;
   ProjectiveIntegratorParams projective_integrator_params;

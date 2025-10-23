@@ -461,4 +461,20 @@ void MapperParams::set_block_memory_pool_params(
   block_memory_pool_params_ = params->params_;
 }
 
+bool MapperParams::get_do_depth_preprocessing() const {
+  return params_->do_depth_preprocessing;
+}
+
+void MapperParams::set_do_depth_preprocessing(bool value) const {
+  params_->do_depth_preprocessing = value;
+}
+
+bool MapperParams::get_clear_unobserved_blocks_in_fov() const {
+  return params_->clear_unobserved_blocks_in_fov;
+}
+
+void MapperParams::set_clear_unobserved_blocks_in_fov(bool value) const {
+  params_->clear_unobserved_blocks_in_fov = value;
+}
+
 }  // namespace pynvblox

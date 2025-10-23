@@ -162,6 +162,24 @@ class MapperParams:
         # NOTE: We don't call the automatic wrapping function here because we
         # need to convert the subclasses to python objects manually.
 
+    @property
+    def do_depth_preprocessing(self) -> bool:
+        """Whether to preprocess input depth images."""
+        return bool(self._c_params.get_do_depth_preprocessing())
+
+    @do_depth_preprocessing.setter
+    def do_depth_preprocessing(self, value: bool) -> None:
+        self._c_params.set_do_depth_preprocessing(bool(value))
+
+    @property
+    def clear_unobserved_blocks_in_fov(self) -> bool:
+        """Whether to clear unobserved TSDF blocks in the current frustum."""
+        return bool(self._c_params.get_clear_unobserved_blocks_in_fov())
+
+    @clear_unobserved_blocks_in_fov.setter
+    def clear_unobserved_blocks_in_fov(self, value: bool) -> None:
+        self._c_params.set_clear_unobserved_blocks_in_fov(bool(value))
+
     def get_projective_integrator_params(self) -> ProjectiveIntegratorParams:
         """Parameter getter."""
         return ProjectiveIntegratorParams(self._c_params.get_projective_integrator_params())

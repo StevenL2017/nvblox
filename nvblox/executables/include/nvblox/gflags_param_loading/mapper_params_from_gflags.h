@@ -31,6 +31,10 @@ DEFINE_int32(depth_preprocessing_num_dilations,
              kDepthPreprocessingNumDilationsParamDesc.default_value,
              kDepthPreprocessingNumDilationsParamDesc.help_string);
 
+DEFINE_bool(clear_unobserved_blocks_in_fov,
+            kClearUnobservedBlocksInFovParamDesc.default_value,
+            kClearUnobservedBlocksInFovParamDesc.help_string);
+
 DEFINE_double(esdf_slice_min_height, kEsdfSliceMinHeightParamDesc.default_value,
               kEsdfSliceMinHeightParamDesc.help_string);
 
@@ -307,6 +311,14 @@ inline MapperParams get_mapper_params_from_gflags() {
               << FLAGS_depth_preprocessing_num_dilations;
     params.depth_preprocessing_num_dilations =
         FLAGS_depth_preprocessing_num_dilations;
+  }
+  if (!gflags::GetCommandLineFlagInfoOrDie("clear_unobserved_blocks_in_fov")
+           .is_default) {
+    LOG(INFO) << "command line parameter found: "
+                 "clear_unobserved_blocks_in_fov = "
+              << FLAGS_clear_unobserved_blocks_in_fov;
+    params.clear_unobserved_blocks_in_fov =
+        FLAGS_clear_unobserved_blocks_in_fov;
   }
   // 2D esdf slice
   if (!gflags::GetCommandLineFlagInfoOrDie("esdf_slice_min_height")
