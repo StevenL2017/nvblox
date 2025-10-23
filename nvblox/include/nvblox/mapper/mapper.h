@@ -692,6 +692,12 @@ class Mapper : public MapperBase {
   const DepthImage& preprocessDepthImageAsync(
       const DepthImageConstView& depth_image);
 
+  /// Collect TSDF blocks to clear using occlusion-aware filtering.
+  std::vector<Index3D> collectBlocksToClear(
+      const Transform& T_L_C, const Camera& camera, TsdfLayer* tsdf_layer_ptr,
+      const std::vector<Index3D>& updated_blocks,
+      const MaskedDepthImageConstView& depth_image_for_integration);
+
   /// @brief Deallocate blocks int the esdf, mesh and freespace layer.
   /// @param blocks_to_clear Vector of blocks to clear.
   void clearBlocksInLayers(const std::vector<Index3D>& blocks_to_clear);
