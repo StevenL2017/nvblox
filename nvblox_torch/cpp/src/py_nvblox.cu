@@ -284,7 +284,15 @@ TORCH_LIBRARY(pynvblox, m) {
       .def("get_block_memory_pool_params",
            &MapperParams::get_block_memory_pool_params)
       .def("set_block_memory_pool_params",
-           &MapperParams::set_block_memory_pool_params);
+           &MapperParams::set_block_memory_pool_params)
+      .def("get_do_depth_preprocessing",
+           &MapperParams::get_do_depth_preprocessing)
+      .def("set_do_depth_preprocessing",
+           &MapperParams::set_do_depth_preprocessing)
+      .def("get_clear_unobserved_blocks_in_fov",
+           &MapperParams::get_clear_unobserved_blocks_in_fov)
+      .def("set_clear_unobserved_blocks_in_fov",
+           &MapperParams::set_clear_unobserved_blocks_in_fov);
 
   m.class_<Mapper>("Mapper")
       .def(torch::init<std::vector<double>, std::vector<std::string>,

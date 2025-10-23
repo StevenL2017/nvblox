@@ -15,6 +15,8 @@ limitations under the License.
 */
 #include "nvblox/mapper/mapper.h"
 
+#include <iostream>
+
 #include "nvblox/geometry/bounding_boxes.h"
 #include "nvblox/geometry/bounding_spheres.h"
 #include "nvblox/io/layer_cake_io.h"
@@ -106,6 +108,7 @@ void Mapper::setMapperParams(const MapperParams& params) {
 
   // Decay
   exclude_last_view_from_decay(params.exclude_last_view_from_decay);
+  clear_unobserved_blocks_in_fov(params.clear_unobserved_blocks_in_fov);
 
   // ======= PROJECTIVE INTEGRATOR (TSDF/COLOR/OCCUPANCY)
   // max integration distance
@@ -362,18 +365,76 @@ void Mapper::integrateDepth(const MaskedDepthImageConstView& depth_frame,
 
   // Call the integrator.
   std::vector<Index3D> updated_blocks;
+  std::vector<Index3D> cleared_blocks_in_view;
+  std::vector<Index3D> blocks_to_signal_updates;
   if (hasTsdfLayer(projective_layer_type_)) {
+    TsdfLayer* tsdf_layer_ptr = layers_.getPtr<TsdfLayer>();
     tsdf_integrator_.integrateFrame(
         MaskedDepthImageConstView(depth_image_for_integration), T_L_C, camera,
-        layers_.getPtr<TsdfLayer>(), &updated_blocks);
+        tsdf_layer_ptr, &updated_blocks);
 
-    layers_.getPtr<TsdfLayer>()->updateGpuHash(*cuda_stream_);
+    if (clear_unobserved_blocks_in_fov_) {
+      const float block_size = tsdf_layer_ptr->block_size();
+      float max_distance = tsdf_integrator_.max_integration_distance_m();
+      if (max_distance <= 0.0f) {
+        max_distance =
+            tsdf_integrator_.get_truncation_distance_m(voxel_size_m_);
+      }
+
+      std::vector<Index3D> frustum_blocks =
+          tsdf_integrator_.view_calculator().getBlocksInViewPlanes(
+              T_L_C, camera, block_size, max_distance);
+
+      std::vector<Index3D> blocks_in_view;
+      blocks_in_view.reserve(frustum_blocks.size());
+      for (const Index3D& block_index : frustum_blocks) {
+        if (tsdf_layer_ptr->isBlockAllocated(block_index)) {
+          blocks_in_view.push_back(block_index);
+        }
+      }
+
+      Index3DSet updated_block_set(updated_blocks.begin(),
+                                   updated_blocks.end());
+      std::vector<Index3D> candidate_blocks;
+      candidate_blocks.reserve(blocks_in_view.size());
+      for (const Index3D& block_index : blocks_in_view) {
+        if (updated_block_set.find(block_index) == updated_block_set.end()) {
+          candidate_blocks.push_back(block_index);
+        }
+      }
+
+      std::vector<Index3D> blocks_to_clear;
+      blocks_to_clear.reserve(candidate_blocks.size());
+      for (const Index3D& candidate : candidate_blocks) {
+        if (tsdf_layer_ptr->isBlockAllocated(candidate)) {
+          blocks_to_clear.push_back(candidate);
+        }
+      }
+
+      // std::cout << "clear_unobserved_blocks_in_fov sizes -- view: "
+      //           << blocks_in_view.size()
+      //           << ", candidates: " << candidate_blocks.size()
+      //           << ", to_clear: " << blocks_to_clear.size() << std::endl;
+
+      if (!blocks_to_clear.empty()) {
+        tsdf_layer_ptr->clearBlocksAsync(blocks_to_clear, *cuda_stream_);
+        clearBlocksInLayers(blocks_to_clear);
+        cleared_blocks_in_view.swap(blocks_to_clear);
+      }
+    }
+
+    tsdf_layer_ptr->updateGpuHash(*cuda_stream_);
+    blocks_to_signal_updates = updated_blocks;
+    blocks_to_signal_updates.insert(blocks_to_signal_updates.end(),
+                                    cleared_blocks_in_view.begin(),
+                                    cleared_blocks_in_view.end());
   } else if (projective_layer_type_ == ProjectiveLayerType::kOccupancy) {
     occupancy_integrator_.integrateFrame(
         depth_image_for_integration, T_L_C, camera,
         layers_.getPtr<OccupancyLayer>(), &updated_blocks);
 
     layers_.getPtr<OccupancyLayer>()->updateGpuHash(*cuda_stream_);
+    blocks_to_signal_updates = updated_blocks;
   }
 
   // Save the viewpoint for use in viewpoint exclusion.
@@ -396,7 +457,7 @@ void Mapper::integrateDepth(const MaskedDepthImageConstView& depth_frame,
     last_depth_T_L_C_ = T_L_C;
   }
 
-  blocks_to_update_tracker_.addBlocksToUpdate(updated_blocks);
+  blocks_to_update_tracker_.addBlocksToUpdate(blocks_to_signal_updates);
 }
 
 void Mapper::integrateLidarDepth(const DepthImage& depth_frame,
@@ -932,6 +993,8 @@ parameters::ParameterTreeNode Mapper::getParameterTree(
                          depth_preprocessing_num_dilations_),
        ParameterTreeNode("exclude_last_view_from_decay",
                          exclude_last_view_from_decay_),
+       ParameterTreeNode("clear_unobserved_blocks_in_fov",
+                         clear_unobserved_blocks_in_fov_),
        tsdf_integrator_.getParameterTree("camera_tsdf_integrator"),
        lidar_tsdf_integrator_.getParameterTree("lidar_tsdf_integrator"),
        color_integrator_.getParameterTree(),

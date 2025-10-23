@@ -254,6 +254,12 @@ struct MapperParams : torch::CustomClassHolder {
   void set_block_memory_pool_params(
       c10::intrusive_ptr<BlockMemoryPoolParams> params);
 
+  bool get_do_depth_preprocessing() const;
+  void set_do_depth_preprocessing(bool value) const;
+
+  bool get_clear_unobserved_blocks_in_fov() const;
+  void set_clear_unobserved_blocks_in_fov(bool value) const;
+
   std::shared_ptr<nvblox::MapperParams> params_;
 
   // TODO(dtingdahl) Remove when Block memory params becomes part of
