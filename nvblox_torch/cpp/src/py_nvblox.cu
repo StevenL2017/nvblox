@@ -297,14 +297,26 @@ TORCH_LIBRARY(pynvblox, m) {
            &MapperParams::get_filter_small_tsdf_block_updates)
       .def("set_filter_small_tsdf_block_updates",
            &MapperParams::set_filter_small_tsdf_block_updates)
-      .def("get_min_tsdf_block_distance_change_threshold",
-           &MapperParams::get_min_tsdf_block_distance_change_threshold)
-      .def("set_min_tsdf_block_distance_change_threshold",
-           &MapperParams::set_min_tsdf_block_distance_change_threshold)
-      .def("get_min_tsdf_block_weight_change_threshold",
-           &MapperParams::get_min_tsdf_block_weight_change_threshold)
-      .def("set_min_tsdf_block_weight_change_threshold",
-           &MapperParams::set_min_tsdf_block_weight_change_threshold);
+      .def("get_tsdf_filter_zc_ratio_epsilon",
+           &MapperParams::get_tsdf_filter_zc_ratio_epsilon)
+      .def("set_tsdf_filter_zc_ratio_epsilon",
+           &MapperParams::set_tsdf_filter_zc_ratio_epsilon)
+      .def("get_tsdf_filter_iou_tolerance",
+           &MapperParams::get_tsdf_filter_iou_tolerance)
+      .def("set_tsdf_filter_iou_tolerance",
+           &MapperParams::set_tsdf_filter_iou_tolerance)
+      .def("get_tsdf_filter_l1_q75_threshold",
+           &MapperParams::get_tsdf_filter_l1_q75_threshold)
+      .def("set_tsdf_filter_l1_q75_threshold",
+           &MapperParams::set_tsdf_filter_l1_q75_threshold)
+      .def("get_tsdf_filter_near_zero_band_m",
+           &MapperParams::get_tsdf_filter_near_zero_band_m)
+      .def("set_tsdf_filter_near_zero_band_m",
+           &MapperParams::set_tsdf_filter_near_zero_band_m)
+      .def("get_tsdf_filter_min_weight",
+           &MapperParams::get_tsdf_filter_min_weight)
+      .def("set_tsdf_filter_min_weight",
+           &MapperParams::set_tsdf_filter_min_weight);
 
   m.class_<Mapper>("Mapper")
       .def(torch::init<std::vector<double>, std::vector<std::string>,

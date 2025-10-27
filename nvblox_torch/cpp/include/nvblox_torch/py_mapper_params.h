@@ -263,11 +263,20 @@ struct MapperParams : torch::CustomClassHolder {
   bool get_filter_small_tsdf_block_updates() const;
   void set_filter_small_tsdf_block_updates(bool value) const;
 
-  double get_min_tsdf_block_distance_change_threshold() const;
-  void set_min_tsdf_block_distance_change_threshold(double value) const;
+  double get_tsdf_filter_zc_ratio_epsilon() const;
+  void set_tsdf_filter_zc_ratio_epsilon(double value) const;
 
-  double get_min_tsdf_block_weight_change_threshold() const;
-  void set_min_tsdf_block_weight_change_threshold(double value) const;
+  double get_tsdf_filter_iou_tolerance() const;
+  void set_tsdf_filter_iou_tolerance(double value) const;
+
+  double get_tsdf_filter_l1_q75_threshold() const;
+  void set_tsdf_filter_l1_q75_threshold(double value) const;
+
+  double get_tsdf_filter_near_zero_band_m() const;
+  void set_tsdf_filter_near_zero_band_m(double value) const;
+
+  double get_tsdf_filter_min_weight() const;
+  void set_tsdf_filter_min_weight(double value) const;
 
   std::shared_ptr<nvblox::MapperParams> params_;
 

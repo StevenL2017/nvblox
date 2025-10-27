@@ -485,26 +485,44 @@ void MapperParams::set_filter_small_tsdf_block_updates(bool value) const {
   params_->filter_small_tsdf_block_updates = value;
 }
 
-double MapperParams::get_min_tsdf_block_distance_change_threshold() const {
-  return static_cast<double>(
-      params_->min_tsdf_block_distance_change_threshold);
+double MapperParams::get_tsdf_filter_zc_ratio_epsilon() const {
+  return static_cast<double>(params_->tsdf_filter_zc_ratio_epsilon);
 }
 
-void MapperParams::set_min_tsdf_block_distance_change_threshold(
-    double value) const {
-  params_->min_tsdf_block_distance_change_threshold =
-      static_cast<float>(value);
+void MapperParams::set_tsdf_filter_zc_ratio_epsilon(double value) const {
+  params_->tsdf_filter_zc_ratio_epsilon = static_cast<float>(value);
 }
 
-double MapperParams::get_min_tsdf_block_weight_change_threshold() const {
-  return static_cast<double>(
-      params_->min_tsdf_block_weight_change_threshold);
+double MapperParams::get_tsdf_filter_iou_tolerance() const {
+  return static_cast<double>(params_->tsdf_filter_iou_tolerance);
 }
 
-void MapperParams::set_min_tsdf_block_weight_change_threshold(
-    double value) const {
-  params_->min_tsdf_block_weight_change_threshold =
-      static_cast<float>(value);
+void MapperParams::set_tsdf_filter_iou_tolerance(double value) const {
+  params_->tsdf_filter_iou_tolerance = static_cast<float>(value);
+}
+
+double MapperParams::get_tsdf_filter_l1_q75_threshold() const {
+  return static_cast<double>(params_->tsdf_filter_l1_q75_threshold);
+}
+
+void MapperParams::set_tsdf_filter_l1_q75_threshold(double value) const {
+  params_->tsdf_filter_l1_q75_threshold = static_cast<float>(value);
+}
+
+double MapperParams::get_tsdf_filter_near_zero_band_m() const {
+  return static_cast<double>(params_->tsdf_filter_near_zero_band_m);
+}
+
+void MapperParams::set_tsdf_filter_near_zero_band_m(double value) const {
+  params_->tsdf_filter_near_zero_band_m = static_cast<float>(value);
+}
+
+double MapperParams::get_tsdf_filter_min_weight() const {
+  return static_cast<double>(params_->tsdf_filter_min_weight);
+}
+
+void MapperParams::set_tsdf_filter_min_weight(double value) const {
+  params_->tsdf_filter_min_weight = static_cast<float>(value);
 }
 
 }  // namespace pynvblox

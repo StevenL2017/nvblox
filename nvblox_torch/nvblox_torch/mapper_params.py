@@ -190,22 +190,49 @@ class MapperParams:
         self._c_params.set_filter_small_tsdf_block_updates(bool(value))
 
     @property
-    def min_tsdf_block_distance_change_threshold(self) -> float:
-        """Distance change threshold for TSDF block update filtering."""
-        return float(self._c_params.get_min_tsdf_block_distance_change_threshold())
+    def tsdf_filter_zc_ratio_epsilon(self) -> float:
+        """Zero-crossing relative change threshold for block filtering."""
+        return float(self._c_params.get_tsdf_filter_zc_ratio_epsilon())
 
-    @min_tsdf_block_distance_change_threshold.setter
-    def min_tsdf_block_distance_change_threshold(self, value: float) -> None:
-        self._c_params.set_min_tsdf_block_distance_change_threshold(float(value))
+    @tsdf_filter_zc_ratio_epsilon.setter
+    def tsdf_filter_zc_ratio_epsilon(self, value: float) -> None:
+        self._c_params.set_tsdf_filter_zc_ratio_epsilon(float(value))
 
     @property
-    def min_tsdf_block_weight_change_threshold(self) -> float:
-        """Weight change threshold for TSDF block update filtering."""
-        return float(self._c_params.get_min_tsdf_block_weight_change_threshold())
+    def tsdf_filter_iou_tolerance(self) -> float:
+        """IoU tolerance for the near-zero mask comparison."""
+        return float(self._c_params.get_tsdf_filter_iou_tolerance())
 
-    @min_tsdf_block_weight_change_threshold.setter
-    def min_tsdf_block_weight_change_threshold(self, value: float) -> None:
-        self._c_params.set_min_tsdf_block_weight_change_threshold(float(value))
+    @tsdf_filter_iou_tolerance.setter
+    def tsdf_filter_iou_tolerance(self, value: float) -> None:
+        self._c_params.set_tsdf_filter_iou_tolerance(float(value))
+
+    @property
+    def tsdf_filter_l1_q75_threshold(self) -> float:
+        """Distance change threshold for TSDF block update filtering."""
+        return float(self._c_params.get_tsdf_filter_l1_q75_threshold())
+
+    @tsdf_filter_l1_q75_threshold.setter
+    def tsdf_filter_l1_q75_threshold(self, value: float) -> None:
+        self._c_params.set_tsdf_filter_l1_q75_threshold(float(value))
+
+    @property
+    def tsdf_filter_near_zero_band_m(self) -> float:
+        """Half-width of the near-zero band used for filtering."""
+        return float(self._c_params.get_tsdf_filter_near_zero_band_m())
+
+    @tsdf_filter_near_zero_band_m.setter
+    def tsdf_filter_near_zero_band_m(self, value: float) -> None:
+        self._c_params.set_tsdf_filter_near_zero_band_m(float(value))
+
+    @property
+    def tsdf_filter_min_weight(self) -> float:
+        """Weight change threshold for TSDF block update filtering."""
+        return float(self._c_params.get_tsdf_filter_min_weight())
+
+    @tsdf_filter_min_weight.setter
+    def tsdf_filter_min_weight(self, value: float) -> None:
+        self._c_params.set_tsdf_filter_min_weight(float(value))
 
     def get_projective_integrator_params(self) -> ProjectiveIntegratorParams:
         """Parameter getter."""
