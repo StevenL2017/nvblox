@@ -180,6 +180,33 @@ class MapperParams:
     def clear_unobserved_blocks_in_fov(self, value: bool) -> None:
         self._c_params.set_clear_unobserved_blocks_in_fov(bool(value))
 
+    @property
+    def filter_small_tsdf_block_updates(self) -> bool:
+        """Whether to filter unchanged TSDF blocks when reporting updates."""
+        return bool(self._c_params.get_filter_small_tsdf_block_updates())
+
+    @filter_small_tsdf_block_updates.setter
+    def filter_small_tsdf_block_updates(self, value: bool) -> None:
+        self._c_params.set_filter_small_tsdf_block_updates(bool(value))
+
+    @property
+    def min_tsdf_block_distance_change_threshold(self) -> float:
+        """Distance change threshold for TSDF block update filtering."""
+        return float(self._c_params.get_min_tsdf_block_distance_change_threshold())
+
+    @min_tsdf_block_distance_change_threshold.setter
+    def min_tsdf_block_distance_change_threshold(self, value: float) -> None:
+        self._c_params.set_min_tsdf_block_distance_change_threshold(float(value))
+
+    @property
+    def min_tsdf_block_weight_change_threshold(self) -> float:
+        """Weight change threshold for TSDF block update filtering."""
+        return float(self._c_params.get_min_tsdf_block_weight_change_threshold())
+
+    @min_tsdf_block_weight_change_threshold.setter
+    def min_tsdf_block_weight_change_threshold(self, value: float) -> None:
+        self._c_params.set_min_tsdf_block_weight_change_threshold(float(value))
+
     def get_projective_integrator_params(self) -> ProjectiveIntegratorParams:
         """Parameter getter."""
         return ProjectiveIntegratorParams(self._c_params.get_projective_integrator_params())

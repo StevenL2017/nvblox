@@ -19,6 +19,7 @@ limitations under the License.
 #include <cstddef>
 #include <cmath>
 #include <limits>
+#include <utility>
 
 #include "nvblox/core/indexing.h"
 #include "nvblox/geometry/bounding_boxes.h"
@@ -231,6 +232,109 @@ std::vector<Index3D> Mapper::collectBlocksToClear(
                                    T_L_C, camera, cuda_stream_.get());
 }
 
+Mapper::TsdfBlockStatistics Mapper::computeTsdfBlockStatistics(
+    const TsdfLayer::BlockType& block) const {
+  TsdfBlockStatistics stats;
+  double sum_distance = 0.0;
+  double sum_abs_distance = 0.0;
+  double sum_weight = 0.0;
+  float max_weight = 0.0f;
+
+  for (int x = 0; x < TsdfLayer::BlockType::kVoxelsPerSide; ++x) {
+    for (int y = 0; y < TsdfLayer::BlockType::kVoxelsPerSide; ++y) {
+      for (int z = 0; z < TsdfLayer::BlockType::kVoxelsPerSide; ++z) {
+        const TsdfVoxel& voxel = block.voxels[x][y][z];
+        const float weight = voxel.weight;
+        sum_distance += static_cast<double>(voxel.distance);
+        sum_abs_distance += static_cast<double>(std::fabs(voxel.distance));
+        sum_weight += static_cast<double>(weight);
+        max_weight = std::max(max_weight, weight);
+      }
+    }
+  }
+
+  const double inv_voxel_count =
+      1.0 / static_cast<double>(TsdfLayer::BlockType::kNumVoxels);
+  stats.mean_distance =
+      static_cast<float>(sum_distance * inv_voxel_count);
+  stats.mean_abs_distance =
+      static_cast<float>(sum_abs_distance * inv_voxel_count);
+  stats.mean_weight =
+      static_cast<float>(sum_weight * inv_voxel_count);
+  stats.max_weight = max_weight;
+  return stats;
+}
+
+bool Mapper::tsdfBlockChangeIsSignificant(
+    const TsdfBlockStatistics& previous,
+    const TsdfBlockStatistics& current) const {
+  const float mean_distance_diff =
+      std::fabs(current.mean_distance - previous.mean_distance);
+  const float mean_abs_distance_diff =
+      std::fabs(current.mean_abs_distance - previous.mean_abs_distance);
+  const float mean_weight_diff =
+      std::fabs(current.mean_weight - previous.mean_weight);
+  const float max_weight_diff =
+      std::fabs(current.max_weight - previous.max_weight);
+
+  if (mean_distance_diff >= min_tsdf_block_distance_change_threshold_) {
+    return true;
+  }
+  if (mean_abs_distance_diff >= min_tsdf_block_distance_change_threshold_) {
+    return true;
+  }
+  if (mean_weight_diff >= min_tsdf_block_weight_change_threshold_) {
+    return true;
+  }
+  if (max_weight_diff >= min_tsdf_block_weight_change_threshold_) {
+    return true;
+  }
+  return false;
+}
+
+std::vector<Index3D> Mapper::filterBlocksWithSmallTsdfChange(
+    const std::vector<Index3D>& candidate_blocks,
+    TsdfLayer* tsdf_layer_ptr) {
+  if (!filter_small_tsdf_block_updates_ || tsdf_layer_ptr == nullptr) {
+    return candidate_blocks;
+  }
+
+  std::vector<Index3D> significant_blocks;
+  significant_blocks.reserve(candidate_blocks.size());
+
+  for (const Index3D& block_index : candidate_blocks) {
+    auto block_ptr = tsdf_layer_ptr->getBlockAtIndex(block_index);
+    if (!block_ptr) {
+      continue;
+    }
+
+    TsdfBlockStatistics current_stats;
+    if (block_ptr.memory_type() == MemoryType::kDevice) {
+      auto block_host = block_ptr.clone(MemoryType::kHost);
+      current_stats = computeTsdfBlockStatistics(*block_host);
+    } else {
+      current_stats = computeTsdfBlockStatistics(*block_ptr);
+    }
+
+    const auto previous_it =
+        last_reported_tsdf_block_stats_.find(block_index);
+    if (previous_it == last_reported_tsdf_block_stats_.end() ||
+        tsdfBlockChangeIsSignificant(previous_it->second, current_stats)) {
+      significant_blocks.push_back(block_index);
+      last_reported_tsdf_block_stats_[block_index] = current_stats;
+    }
+  }
+
+  return significant_blocks;
+}
+
+void Mapper::forgetTsdfBlockStatistics(
+    const std::vector<Index3D>& block_indices) {
+  for (const Index3D& block_index : block_indices) {
+    last_reported_tsdf_block_stats_.erase(block_index);
+  }
+}
+
 Mapper::Mapper(float voxel_size_m,
                BlockMemoryPoolParams block_memory_pool_params,
                ProjectiveLayerType projective_layer_type,
@@ -313,6 +417,12 @@ void Mapper::setMapperParams(const MapperParams& params) {
   // Decay
   exclude_last_view_from_decay(params.exclude_last_view_from_decay);
   clear_unobserved_blocks_in_fov(params.clear_unobserved_blocks_in_fov);
+  filter_small_tsdf_block_updates(
+      params.filter_small_tsdf_block_updates);
+  min_tsdf_block_distance_change_threshold(
+      params.min_tsdf_block_distance_change_threshold);
+  min_tsdf_block_weight_change_threshold(
+      params.min_tsdf_block_weight_change_threshold);
 
   // ======= PROJECTIVE INTEGRATOR (TSDF/COLOR/OCCUPANCY)
   // max integration distance
@@ -589,8 +699,11 @@ void Mapper::integrateDepth(const MaskedDepthImageConstView& depth_frame,
       }
     }
 
+    std::vector<Index3D> significant_blocks =
+        filterBlocksWithSmallTsdfChange(updated_blocks, tsdf_layer_ptr);
+
     tsdf_layer_ptr->updateGpuHash(*cuda_stream_);
-    blocks_to_signal_updates = updated_blocks;
+    blocks_to_signal_updates = std::move(significant_blocks);
     blocks_to_signal_updates.insert(blocks_to_signal_updates.end(),
                                     cleared_blocks_in_view.begin(),
                                     cleared_blocks_in_view.end());
@@ -979,6 +1092,7 @@ std::vector<Index3D> Mapper::getBlocksToUpdate(
 }
 
 void Mapper::clearBlocksInLayers(const std::vector<Index3D>& blocks_to_clear) {
+  forgetTsdfBlockStatistics(blocks_to_clear);
   // Clear the mesh and color blocks.
   layers_.getPtr<ColorLayer>()->clearBlocksAsync(blocks_to_clear,
                                                  *cuda_stream_);

@@ -52,6 +52,23 @@ constexpr Param<bool>::Description kClearUnobservedBlocksInFovParamDesc{
     "Whether to clear TSDF blocks in the current field of view that were not "
     "updated by the current depth frame."};
 
+constexpr Param<bool>::Description kFilterSmallTsdfBlockUpdatesParamDesc{
+    "filter_small_tsdf_block_updates", true,
+    "Whether to filter TSDF block updates whose aggregate change is below a "
+    "threshold so the mesh stays static when geometry is unchanged."};
+
+constexpr Param<float>::Description
+    kMinTsdfBlockDistanceChangeThresholdParamDesc{
+        "min_tsdf_block_distance_change_threshold", 1e-3f,
+        "Minimum change in average TSDF distance (or absolute distance) per "
+        "block required before propagating the block as updated."};
+
+constexpr Param<float>::Description
+    kMinTsdfBlockWeightChangeThresholdParamDesc{
+        "min_tsdf_block_weight_change_threshold", 1e-2f,
+        "Minimum change in average or maximum TSDF weight per block required "
+        "before propagating the block as updated."};
+
 /// A structure containing the mapper parameters. This object can be used to set
 /// all parameters of a mapper.
 struct MapperParams {
@@ -61,6 +78,12 @@ struct MapperParams {
   Param<bool> exclude_last_view_from_decay{kExcludeLastViewFromDecayParamDesc};
   Param<bool> clear_unobserved_blocks_in_fov{
       kClearUnobservedBlocksInFovParamDesc};
+  Param<bool> filter_small_tsdf_block_updates{
+      kFilterSmallTsdfBlockUpdatesParamDesc};
+  Param<float> min_tsdf_block_distance_change_threshold{
+      kMinTsdfBlockDistanceChangeThresholdParamDesc};
+  Param<float> min_tsdf_block_weight_change_threshold{
+      kMinTsdfBlockWeightChangeThresholdParamDesc};
 
   EsdfIntegratorParams esdf_integrator_params;
   ProjectiveIntegratorParams projective_integrator_params;

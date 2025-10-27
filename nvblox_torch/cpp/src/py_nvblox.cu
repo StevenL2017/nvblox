@@ -292,7 +292,19 @@ TORCH_LIBRARY(pynvblox, m) {
       .def("get_clear_unobserved_blocks_in_fov",
            &MapperParams::get_clear_unobserved_blocks_in_fov)
       .def("set_clear_unobserved_blocks_in_fov",
-           &MapperParams::set_clear_unobserved_blocks_in_fov);
+           &MapperParams::set_clear_unobserved_blocks_in_fov)
+      .def("get_filter_small_tsdf_block_updates",
+           &MapperParams::get_filter_small_tsdf_block_updates)
+      .def("set_filter_small_tsdf_block_updates",
+           &MapperParams::set_filter_small_tsdf_block_updates)
+      .def("get_min_tsdf_block_distance_change_threshold",
+           &MapperParams::get_min_tsdf_block_distance_change_threshold)
+      .def("set_min_tsdf_block_distance_change_threshold",
+           &MapperParams::set_min_tsdf_block_distance_change_threshold)
+      .def("get_min_tsdf_block_weight_change_threshold",
+           &MapperParams::get_min_tsdf_block_weight_change_threshold)
+      .def("set_min_tsdf_block_weight_change_threshold",
+           &MapperParams::set_min_tsdf_block_weight_change_threshold);
 
   m.class_<Mapper>("Mapper")
       .def(torch::init<std::vector<double>, std::vector<std::string>,

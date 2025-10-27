@@ -260,6 +260,15 @@ struct MapperParams : torch::CustomClassHolder {
   bool get_clear_unobserved_blocks_in_fov() const;
   void set_clear_unobserved_blocks_in_fov(bool value) const;
 
+  bool get_filter_small_tsdf_block_updates() const;
+  void set_filter_small_tsdf_block_updates(bool value) const;
+
+  double get_min_tsdf_block_distance_change_threshold() const;
+  void set_min_tsdf_block_distance_change_threshold(double value) const;
+
+  double get_min_tsdf_block_weight_change_threshold() const;
+  void set_min_tsdf_block_weight_change_threshold(double value) const;
+
   std::shared_ptr<nvblox::MapperParams> params_;
 
   // TODO(dtingdahl) Remove when Block memory params becomes part of

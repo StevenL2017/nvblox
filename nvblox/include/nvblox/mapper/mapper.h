@@ -16,6 +16,7 @@ limitations under the License.
 #pragma once
 
 #include <optional>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "nvblox/core/hash.h"
@@ -593,6 +594,30 @@ class Mapper : public MapperBase {
     clear_unobserved_blocks_in_fov_ = clear_unobserved_blocks_in_fov;
   }
 
+  /// Enable/disable filtering out TSDF blocks with small changes.
+  bool filter_small_tsdf_block_updates() const {
+    return filter_small_tsdf_block_updates_;
+  }
+  void filter_small_tsdf_block_updates(bool enable_filtering) {
+    filter_small_tsdf_block_updates_ = enable_filtering;
+  }
+  /// Minimum average distance change for a block to be considered updated.
+  float min_tsdf_block_distance_change_threshold() const {
+    return min_tsdf_block_distance_change_threshold_;
+  }
+  void min_tsdf_block_distance_change_threshold(float threshold) {
+    CHECK_GE(threshold, 0.0f);
+    min_tsdf_block_distance_change_threshold_ = threshold;
+  }
+  /// Minimum average weight change for a block to be considered updated.
+  float min_tsdf_block_weight_change_threshold() const {
+    return min_tsdf_block_weight_change_threshold_;
+  }
+  void min_tsdf_block_weight_change_threshold(float threshold) {
+    CHECK_GE(threshold, 0.0f);
+    min_tsdf_block_weight_change_threshold_ = threshold;
+  }
+
   /// Saving and loading functions.
   /// Saving a map will serialize the TSDF and ESDF layers to a file.
   ///@param filename
@@ -698,6 +723,26 @@ class Mapper : public MapperBase {
       const std::vector<Index3D>& updated_blocks,
       const MaskedDepthImageConstView& depth_image_for_integration);
 
+  /// Statistics describing a TSDF block for change detection.
+  struct TsdfBlockStatistics {
+    float mean_distance = 0.0f;
+    float mean_abs_distance = 0.0f;
+    float mean_weight = 0.0f;
+    float max_weight = 0.0f;
+  };
+
+  /// Compute statistics about a TSDF block on the host.
+  TsdfBlockStatistics computeTsdfBlockStatistics(
+      const TsdfLayer::BlockType& block) const;
+  /// Decide if a block change is significant enough to propagate.
+  bool tsdfBlockChangeIsSignificant(const TsdfBlockStatistics& previous,
+                                    const TsdfBlockStatistics& current) const;
+  /// Filter out TSDF blocks whose change is below thresholds.
+  std::vector<Index3D> filterBlocksWithSmallTsdfChange(
+      const std::vector<Index3D>& candidate_blocks, TsdfLayer* tsdf_layer_ptr);
+  /// Forget cached statistics for removed TSDF blocks.
+  void forgetTsdfBlockStatistics(const std::vector<Index3D>& block_indices);
+
   /// @brief Deallocate blocks int the esdf, mesh and freespace layer.
   /// @param blocks_to_clear Vector of blocks to clear.
   void clearBlocksInLayers(const std::vector<Index3D>& blocks_to_clear);
@@ -757,12 +802,23 @@ class Mapper : public MapperBase {
   /// Whether to exclude the last depth frustum from the decay
   bool exclude_last_view_from_decay_ =
       kExcludeLastViewFromDecayParamDesc.default_value;
-  bool clear_unobserved_blocks_in_fov_ =
-      kClearUnobservedBlocksInFovParamDesc.default_value;
+
+  std::unordered_map<Index3D, TsdfBlockStatistics, Index3DHash>
+      last_reported_tsdf_block_stats_;
   /// Last known depth viewpoint for view-based decay exclusion
   std::optional<DepthImage> last_depth_image_;
   std::optional<Camera> last_depth_camera_;
   std::optional<Transform> last_depth_T_L_C_;
+
+  // Some params for customized features
+  bool clear_unobserved_blocks_in_fov_ =
+      kClearUnobservedBlocksInFovParamDesc.default_value;
+  bool filter_small_tsdf_block_updates_ = 
+      kFilterSmallTsdfBlockUpdatesParamDesc.default_value;
+  float min_tsdf_block_distance_change_threshold_ = 
+      kMinTsdfBlockDistanceChangeThresholdParamDesc.default_value;
+  float min_tsdf_block_weight_change_threshold_ = 
+      kMinTsdfBlockWeightChangeThresholdParamDesc.default_value;
 };
 
 }  // namespace nvblox

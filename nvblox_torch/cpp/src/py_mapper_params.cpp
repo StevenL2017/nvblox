@@ -477,4 +477,34 @@ void MapperParams::set_clear_unobserved_blocks_in_fov(bool value) const {
   params_->clear_unobserved_blocks_in_fov = value;
 }
 
+bool MapperParams::get_filter_small_tsdf_block_updates() const {
+  return params_->filter_small_tsdf_block_updates;
+}
+
+void MapperParams::set_filter_small_tsdf_block_updates(bool value) const {
+  params_->filter_small_tsdf_block_updates = value;
+}
+
+double MapperParams::get_min_tsdf_block_distance_change_threshold() const {
+  return static_cast<double>(
+      params_->min_tsdf_block_distance_change_threshold);
+}
+
+void MapperParams::set_min_tsdf_block_distance_change_threshold(
+    double value) const {
+  params_->min_tsdf_block_distance_change_threshold =
+      static_cast<float>(value);
+}
+
+double MapperParams::get_min_tsdf_block_weight_change_threshold() const {
+  return static_cast<double>(
+      params_->min_tsdf_block_weight_change_threshold);
+}
+
+void MapperParams::set_min_tsdf_block_weight_change_threshold(
+    double value) const {
+  params_->min_tsdf_block_weight_change_threshold =
+      static_cast<float>(value);
+}
+
 }  // namespace pynvblox
