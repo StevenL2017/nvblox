@@ -20,7 +20,6 @@ limitations under the License.
 #include <cmath>
 #include <limits>
 #include <utility>
-#include <utility>
 
 #include "nvblox/core/indexing.h"
 #include "nvblox/geometry/bounding_boxes.h"

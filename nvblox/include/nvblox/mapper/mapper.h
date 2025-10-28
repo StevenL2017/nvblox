@@ -835,15 +835,14 @@ class Mapper : public MapperBase {
   /// Whether to exclude the last depth frustum from the decay
   bool exclude_last_view_from_decay_ =
       kExcludeLastViewFromDecayParamDesc.default_value;
-
-  std::unordered_map<Index3D, TsdfBlockSignature, Index3DHash>
-      last_reported_tsdf_block_signatures_;
   /// Last known depth viewpoint for view-based decay exclusion
   std::optional<DepthImage> last_depth_image_;
   std::optional<Camera> last_depth_camera_;
   std::optional<Transform> last_depth_T_L_C_;
 
   // Some params for customized features
+  std::unordered_map<Index3D, TsdfBlockSignature, Index3DHash>
+      last_reported_tsdf_block_signatures_;
   bool clear_unobserved_blocks_in_fov_ =
       kClearUnobservedBlocksInFovParamDesc.default_value;
   bool filter_small_tsdf_block_updates_ =
