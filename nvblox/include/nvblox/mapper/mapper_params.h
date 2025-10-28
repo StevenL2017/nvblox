@@ -52,6 +52,36 @@ constexpr Param<bool>::Description kClearUnobservedBlocksInFovParamDesc{
     "Whether to clear TSDF blocks in the current field of view that were not "
     "updated by the current depth frame."};
 
+constexpr Param<bool>::Description kFilterSmallTsdfBlockUpdatesParamDesc{
+    "filter_small_tsdf_block_updates", true,
+    "Whether to filter TSDF block updates whose aggregate change is below a "
+    "threshold so the mesh stays static when geometry is unchanged."};
+
+constexpr Param<float>::Description kTsdfFilterZcRatioEpsilonParamDesc{
+    "tsdf_filter_zc_ratio_epsilon", 0.02f,
+    "Relative change threshold on zero-crossing cell counts used for TSDF "
+    "block filtering."};
+
+constexpr Param<float>::Description kTsdfFilterIouToleranceParamDesc{
+    "tsdf_filter_iou_tolerance", 0.05f,
+    "Tolerance on (1 - IoU) for the near-zero voxel mask used in TSDF block "
+    "filtering."};
+
+constexpr Param<float>::Description kTsdfFilterL1Q75ThresholdParamDesc{
+    "tsdf_filter_l1_q75_threshold", 1e-3f,
+    "Upper bound on the 75th percentile of |ΔTSDF| inside the near-zero "
+    "band when filtering block updates."};
+
+constexpr Param<float>::Description kTsdfFilterNearZeroBandParamDesc{
+    "tsdf_filter_near_zero_band_m", -1.0f,
+    "Half-width of the near-zero band (in meters) used for TSDF block "
+    "filtering. Set to a negative value to default to 2 * voxel_size."};
+
+constexpr Param<float>::Description kTsdfFilterMinWeightParamDesc{
+    "tsdf_filter_min_weight", 1e-2f,
+    "Minimum TSDF weight a voxel must have to be considered when "
+    "evaluating block update significance."};
+
 /// A structure containing the mapper parameters. This object can be used to set
 /// all parameters of a mapper.
 struct MapperParams {
@@ -61,6 +91,17 @@ struct MapperParams {
   Param<bool> exclude_last_view_from_decay{kExcludeLastViewFromDecayParamDesc};
   Param<bool> clear_unobserved_blocks_in_fov{
       kClearUnobservedBlocksInFovParamDesc};
+  Param<bool> filter_small_tsdf_block_updates{
+      kFilterSmallTsdfBlockUpdatesParamDesc};
+  Param<float> tsdf_filter_zc_ratio_epsilon{
+      kTsdfFilterZcRatioEpsilonParamDesc};
+  Param<float> tsdf_filter_iou_tolerance{
+      kTsdfFilterIouToleranceParamDesc};
+  Param<float> tsdf_filter_l1_q75_threshold{
+      kTsdfFilterL1Q75ThresholdParamDesc};
+  Param<float> tsdf_filter_near_zero_band_m{
+      kTsdfFilterNearZeroBandParamDesc};
+  Param<float> tsdf_filter_min_weight{kTsdfFilterMinWeightParamDesc};
 
   EsdfIntegratorParams esdf_integrator_params;
   ProjectiveIntegratorParams projective_integrator_params;

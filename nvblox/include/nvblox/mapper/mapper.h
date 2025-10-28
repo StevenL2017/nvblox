@@ -15,8 +15,11 @@ limitations under the License.
 */
 #pragma once
 
+#include <cstdint>
 #include <optional>
+#include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 #include "nvblox/core/hash.h"
 #include "nvblox/core/parameter_tree.h"
@@ -593,6 +596,54 @@ class Mapper : public MapperBase {
     clear_unobserved_blocks_in_fov_ = clear_unobserved_blocks_in_fov;
   }
 
+  /// Enable/disable filtering out TSDF blocks with small changes.
+  bool filter_small_tsdf_block_updates() const {
+    return filter_small_tsdf_block_updates_;
+  }
+  void filter_small_tsdf_block_updates(bool enable_filtering) {
+    filter_small_tsdf_block_updates_ = enable_filtering;
+  }
+
+  float tsdf_block_filter_zc_ratio_epsilon() const {
+    return tsdf_filter_zc_ratio_epsilon_;
+  }
+  void tsdf_block_filter_zc_ratio_epsilon(float epsilon) {
+    CHECK_GE(epsilon, 0.0f);
+    tsdf_filter_zc_ratio_epsilon_ = epsilon;
+  }
+
+  float tsdf_block_filter_iou_tolerance() const {
+    return tsdf_filter_iou_tolerance_;
+  }
+  void tsdf_block_filter_iou_tolerance(float tolerance) {
+    CHECK_GE(tolerance, 0.0f);
+    tsdf_filter_iou_tolerance_ = tolerance;
+  }
+
+  float tsdf_block_filter_l1_q75_threshold() const {
+    return tsdf_filter_l1_q75_threshold_;
+  }
+  void tsdf_block_filter_l1_q75_threshold(float threshold) {
+    CHECK_GE(threshold, 0.0f);
+    tsdf_filter_l1_q75_threshold_ = threshold;
+  }
+
+  float tsdf_block_filter_near_zero_band_m() const {
+    return tsdf_filter_near_zero_band_m_;
+  }
+  void tsdf_block_filter_near_zero_band_m(float band_m) {
+    CHECK_GT(band_m, 0.0f);
+    tsdf_filter_near_zero_band_m_ = band_m;
+  }
+
+  float tsdf_block_filter_min_weight() const {
+    return tsdf_filter_min_weight_;
+  }
+  void tsdf_block_filter_min_weight(float min_weight) {
+    CHECK_GE(min_weight, 0.0f);
+    tsdf_filter_min_weight_ = min_weight;
+  }
+
   /// Saving and loading functions.
   /// Saving a map will serialize the TSDF and ESDF layers to a file.
   ///@param filename
@@ -698,6 +749,33 @@ class Mapper : public MapperBase {
       const std::vector<Index3D>& updated_blocks,
       const MaskedDepthImageConstView& depth_image_for_integration);
 
+  /// Statistics describing a TSDF block for change detection.
+  struct TsdfBlockSignature {
+    int zero_crossing_cell_count = 0;
+    uint64_t near_zero_mask = 0u;
+    std::vector<float> distances;
+    std::vector<float> weights;
+  };
+
+  TsdfBlockSignature computeTsdfBlockSignature(
+      const TsdfLayer::BlockType& block) const;
+  float computeZeroCrossingRelativeChange(
+      const TsdfBlockSignature& previous,
+      const TsdfBlockSignature& current) const;
+  float computeNearZeroMaskIou(const TsdfBlockSignature& previous,
+                               const TsdfBlockSignature& current) const;
+  float computeNearZeroDeltaQuantile(const TsdfBlockSignature& previous,
+                                     const TsdfBlockSignature& current,
+                                     float quantile) const;
+  /// Decide if a block change is significant enough to propagate.
+  bool tsdfBlockChangeIsSignificant(const TsdfBlockSignature& previous,
+                                    const TsdfBlockSignature& current) const;
+  /// Filter out TSDF blocks whose change is below thresholds.
+  std::vector<Index3D> filterBlocksWithSmallTsdfChange(
+      const std::vector<Index3D>& candidate_blocks, TsdfLayer* tsdf_layer_ptr);
+  /// Forget cached signatures for removed TSDF blocks.
+  void forgetTsdfBlockSignatures(const std::vector<Index3D>& block_indices);
+
   /// @brief Deallocate blocks int the esdf, mesh and freespace layer.
   /// @param blocks_to_clear Vector of blocks to clear.
   void clearBlocksInLayers(const std::vector<Index3D>& blocks_to_clear);
@@ -757,12 +835,29 @@ class Mapper : public MapperBase {
   /// Whether to exclude the last depth frustum from the decay
   bool exclude_last_view_from_decay_ =
       kExcludeLastViewFromDecayParamDesc.default_value;
-  bool clear_unobserved_blocks_in_fov_ =
-      kClearUnobservedBlocksInFovParamDesc.default_value;
   /// Last known depth viewpoint for view-based decay exclusion
   std::optional<DepthImage> last_depth_image_;
   std::optional<Camera> last_depth_camera_;
   std::optional<Transform> last_depth_T_L_C_;
+
+  // Some params for customized features
+  std::unordered_map<Index3D, TsdfBlockSignature, Index3DHash>
+      last_reported_tsdf_block_signatures_;
+  bool clear_unobserved_blocks_in_fov_ =
+      kClearUnobservedBlocksInFovParamDesc.default_value;
+  bool filter_small_tsdf_block_updates_ =
+      kFilterSmallTsdfBlockUpdatesParamDesc.default_value;
+  float tsdf_filter_zc_ratio_epsilon_ =
+      kTsdfFilterZcRatioEpsilonParamDesc.default_value;
+  float tsdf_filter_iou_tolerance_ =
+      kTsdfFilterIouToleranceParamDesc.default_value;
+  float tsdf_filter_l1_q75_threshold_ =
+      kTsdfFilterL1Q75ThresholdParamDesc.default_value;
+  float tsdf_filter_near_zero_band_m_ =
+      kTsdfFilterNearZeroBandParamDesc.default_value;
+  float tsdf_filter_min_weight_ =
+      kTsdfFilterMinWeightParamDesc.default_value;
+  int tsdf_filter_macro_subdivisions_ = 4;
 };
 
 }  // namespace nvblox
