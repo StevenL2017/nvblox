@@ -126,6 +126,57 @@ TORCH_LIBRARY(pynvblox, m) {
       .def("set_mesh_integrator_weld_vertices",
            &MeshIntegratorParams::set_mesh_integrator_weld_vertices);
 
+  m.class_<MeshOptimizerParams>("MeshOptimizerParams")
+      .def(torch::init())
+      .def("get_mesh_optimizer_enable",
+           &MeshOptimizerParams::get_mesh_optimizer_enable)
+      .def("set_mesh_optimizer_enable",
+           &MeshOptimizerParams::set_mesh_optimizer_enable)
+      .def("get_mesh_optimizer_min_triangle_area_factor",
+           &MeshOptimizerParams::get_mesh_optimizer_min_triangle_area_factor)
+      .def("set_mesh_optimizer_min_triangle_area_factor",
+           &MeshOptimizerParams::set_mesh_optimizer_min_triangle_area_factor)
+      .def("get_mesh_optimizer_max_edge_length_factor",
+           &MeshOptimizerParams::get_mesh_optimizer_max_edge_length_factor)
+      .def("set_mesh_optimizer_max_edge_length_factor",
+           &MeshOptimizerParams::set_mesh_optimizer_max_edge_length_factor)
+      .def("get_mesh_optimizer_max_aspect_ratio",
+           &MeshOptimizerParams::get_mesh_optimizer_max_aspect_ratio)
+      .def("set_mesh_optimizer_max_aspect_ratio",
+           &MeshOptimizerParams::set_mesh_optimizer_max_aspect_ratio)
+      .def("get_mesh_optimizer_small_component_area_factor",
+           &MeshOptimizerParams::get_mesh_optimizer_small_component_area_factor)
+      .def("set_mesh_optimizer_small_component_area_factor",
+           &MeshOptimizerParams::set_mesh_optimizer_small_component_area_factor)
+      .def("get_mesh_optimizer_simplify_target_ratio",
+           &MeshOptimizerParams::get_mesh_optimizer_simplify_target_ratio)
+      .def("set_mesh_optimizer_simplify_target_ratio",
+           &MeshOptimizerParams::set_mesh_optimizer_simplify_target_ratio)
+      .def("get_mesh_optimizer_simplify_abs_error_vox",
+           &MeshOptimizerParams::get_mesh_optimizer_simplify_abs_error_vox)
+      .def("set_mesh_optimizer_simplify_abs_error_vox",
+           &MeshOptimizerParams::set_mesh_optimizer_simplify_abs_error_vox)
+      .def("get_mesh_optimizer_simplify_relative_error",
+           &MeshOptimizerParams::get_mesh_optimizer_simplify_relative_error)
+      .def("set_mesh_optimizer_simplify_relative_error",
+           &MeshOptimizerParams::set_mesh_optimizer_simplify_relative_error)
+      .def("get_mesh_optimizer_simplify_use_sloppy",
+           &MeshOptimizerParams::get_mesh_optimizer_simplify_use_sloppy)
+      .def("set_mesh_optimizer_simplify_use_sloppy",
+           &MeshOptimizerParams::set_mesh_optimizer_simplify_use_sloppy)
+      .def("get_mesh_optimizer_simplify_lock_border",
+           &MeshOptimizerParams::get_mesh_optimizer_simplify_lock_border)
+      .def("set_mesh_optimizer_simplify_lock_border",
+           &MeshOptimizerParams::set_mesh_optimizer_simplify_lock_border)
+      .def("get_mesh_optimizer_optimize_overdraw",
+           &MeshOptimizerParams::get_mesh_optimizer_optimize_overdraw)
+      .def("set_mesh_optimizer_optimize_overdraw",
+           &MeshOptimizerParams::set_mesh_optimizer_optimize_overdraw)
+      .def("get_mesh_optimizer_overdraw_threshold",
+           &MeshOptimizerParams::get_mesh_optimizer_overdraw_threshold)
+      .def("set_mesh_optimizer_overdraw_threshold",
+           &MeshOptimizerParams::set_mesh_optimizer_overdraw_threshold);
+
   m.class_<DecayIntegratorBaseParams>("DecayIntegratorBaseParams")
       .def(torch::init())
       .def("get_decay_integrator_deallocate_decayed_blocks",
@@ -261,6 +312,10 @@ TORCH_LIBRARY(pynvblox, m) {
            &MapperParams::get_mesh_integrator_params)
       .def("set_mesh_integrator_params",
            &MapperParams::set_mesh_integrator_params)
+      .def("get_mesh_optimizer_params",
+           &MapperParams::get_mesh_optimizer_params)
+      .def("set_mesh_optimizer_params",
+           &MapperParams::set_mesh_optimizer_params)
       .def("get_decay_integrator_base_params",
            &MapperParams::get_decay_integrator_base_params)
       .def("set_decay_integrator_base_params",

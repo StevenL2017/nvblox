@@ -82,6 +82,72 @@ constexpr Param<float>::Description kTsdfFilterMinWeightParamDesc{
     "Minimum TSDF weight a voxel must have to be considered when "
     "evaluating block update significance."};
 
+// ======= MESH OPTIMIZATION =======
+constexpr Param<bool>::Description kMeshOptimizerEnableParamDesc{
+    "mesh_optimizer_enable", true,
+    "Enable block-level mesh post processing and simplification."};
+constexpr Param<float>::Description kMeshOptimizerMinTriangleAreaFactorParamDesc{
+    "mesh_optimizer_min_triangle_area_factor", 0.01f,
+    "Minimum triangle area factor relative to voxel_size^2 used for culling."};
+constexpr Param<float>::Description kMeshOptimizerMaxEdgeLengthFactorParamDesc{
+    "mesh_optimizer_max_edge_length_factor", 4.0f,
+    "Maximum edge length factor relative to voxel_size used for filtering."};
+constexpr Param<float>::Description kMeshOptimizerMaxAspectRatioParamDesc{
+    "mesh_optimizer_max_aspect_ratio", 10.0f,
+    "Maximum allowed triangle aspect ratio (larger values are more permissive)."};
+constexpr Param<float>::Description kMeshOptimizerSmallComponentAreaFactorParamDesc{
+    "mesh_optimizer_small_component_area_factor", 0.0f,
+    "Minimum summed triangle area factor (relative to voxel_size^2) for "
+    "connected components to keep. Set to 0 to keep all components."};
+constexpr Param<float>::Description kMeshOptimizerSimplifyTargetRatioParamDesc{
+    "mesh_optimizer_simplify_target_ratio", 0.6f,
+    "Target triangle index ratio for mesh simplification (0-1]."};
+constexpr Param<float>::Description kMeshOptimizerSimplifyAbsErrorVoxParamDesc{
+    "mesh_optimizer_simplify_abs_error_vox", 0.0f,
+    "Allowed absolute simplification error expressed in voxel sizes. "
+    "Set to 0 to disable the absolute error constraint."};
+constexpr Param<float>::Description kMeshOptimizerSimplifyRelativeErrorParamDesc{
+    "mesh_optimizer_simplify_relative_error", 0.01f,
+    "Relative error bound used when absolute error is disabled."};
+constexpr Param<bool>::Description kMeshOptimizerSimplifyUseSloppyParamDesc{
+    "mesh_optimizer_simplify_use_sloppy", false,
+    "Use the faster sloppy simplifier variant (lower quality)."};
+constexpr Param<bool>::Description kMeshOptimizerSimplifyLockBorderParamDesc{
+    "mesh_optimizer_simplify_lock_border", true,
+    "Lock block borders during simplification to avoid cracks across blocks."};
+constexpr Param<bool>::Description kMeshOptimizerOptimizeOverdrawParamDesc{
+    "mesh_optimizer_optimize_overdraw", true,
+    "Run the overdraw optimization pass after simplification."};
+constexpr Param<float>::Description kMeshOptimizerOverdrawThresholdParamDesc{
+    "mesh_optimizer_overdraw_threshold", 1.05f,
+    "Expected overdraw threshold used by the overdraw optimizer."};
+
+struct MeshOptimizerParams {
+  Param<bool> mesh_optimizer_enable{kMeshOptimizerEnableParamDesc};
+  Param<float> mesh_optimizer_min_triangle_area_factor{
+      kMeshOptimizerMinTriangleAreaFactorParamDesc};
+  Param<float> mesh_optimizer_max_edge_length_factor{
+      kMeshOptimizerMaxEdgeLengthFactorParamDesc};
+  Param<float> mesh_optimizer_max_aspect_ratio{
+      kMeshOptimizerMaxAspectRatioParamDesc};
+  Param<float> mesh_optimizer_small_component_area_factor{
+      kMeshOptimizerSmallComponentAreaFactorParamDesc};
+  Param<float> mesh_optimizer_simplify_target_ratio{
+      kMeshOptimizerSimplifyTargetRatioParamDesc};
+  Param<float> mesh_optimizer_simplify_abs_error_vox{
+      kMeshOptimizerSimplifyAbsErrorVoxParamDesc};
+  Param<float> mesh_optimizer_simplify_relative_error{
+      kMeshOptimizerSimplifyRelativeErrorParamDesc};
+  Param<bool> mesh_optimizer_simplify_use_sloppy{
+      kMeshOptimizerSimplifyUseSloppyParamDesc};
+  Param<bool> mesh_optimizer_simplify_lock_border{
+      kMeshOptimizerSimplifyLockBorderParamDesc};
+  Param<bool> mesh_optimizer_optimize_overdraw{
+      kMeshOptimizerOptimizeOverdrawParamDesc};
+  Param<float> mesh_optimizer_overdraw_threshold{
+      kMeshOptimizerOverdrawThresholdParamDesc};
+};
+
 /// A structure containing the mapper parameters. This object can be used to set
 /// all parameters of a mapper.
 struct MapperParams {
@@ -108,6 +174,7 @@ struct MapperParams {
   ViewCalculatorParams view_calculator_params;
   OccupancyIntegratorParams occupancy_integrator_params;
   MeshIntegratorParams mesh_integrator_params;
+  MeshOptimizerParams mesh_optimizer_params;
   TsdfDecayIntegratorParams tsdf_decay_integrator_params;
   DecayIntegratorBaseParams decay_integrator_base_params;
   OccupancyDecayIntegratorParams occupancy_decay_integrator_params;

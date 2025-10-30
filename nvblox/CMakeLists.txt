@@ -22,6 +22,8 @@ message(STATUS "Downloading GTEST")
 include(thirdparty/gtest/gtest.cmake)
 message(STATUS "Downloading benchmark")
 include(thirdparty/benchmark/benchmark.cmake)
+message(STATUS "Downloading meshoptimizer")
+include(thirdparty/meshoptimizer/meshoptimizer.cmake)
 
 # Enable compiler warnings. We do this after inclusion of third party libraries
 # to avoid warnings we have no control over TODO(dtingdahl) Fix pytorch warnings
@@ -118,6 +120,7 @@ add_nvblox_shared_library(
   src/map_saving/sqlite_database.cpp
   src/map_saving/layer_type_register.cpp
   src/mesh/mesh_block.cu
+  src/mesh/mesh_block_optimizer.cpp
   src/mesh/mesh_integrator_appearance.cu
   src/mesh/mesh_integrator.cu
   src/primitives/primitives.cpp
@@ -141,6 +144,7 @@ add_nvblox_shared_library(
   LINK_LIBRARIES_PRIVATE
   nvblox_stdgpu
   nvblox_gpu_hash
+  meshoptimizer
   sqlite3
   CUDA::nppc
   CUDA::nppial

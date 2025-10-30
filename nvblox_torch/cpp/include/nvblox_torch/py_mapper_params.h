@@ -71,6 +71,51 @@ struct MeshIntegratorParams : torch::CustomClassHolder {
   std::shared_ptr<nvblox::MeshIntegratorParams> params_;
 };
 
+struct MeshOptimizerParams : torch::CustomClassHolder {
+  MeshOptimizerParams()
+      : params_(std::make_shared<nvblox::MeshOptimizerParams>()) {}
+  MeshOptimizerParams(const nvblox::MeshOptimizerParams params)
+      : params_(std::make_shared<nvblox::MeshOptimizerParams>(params)) {}
+
+  bool get_mesh_optimizer_enable() const;
+  void set_mesh_optimizer_enable(bool value);
+
+  double get_mesh_optimizer_min_triangle_area_factor() const;
+  void set_mesh_optimizer_min_triangle_area_factor(double value);
+
+  double get_mesh_optimizer_max_edge_length_factor() const;
+  void set_mesh_optimizer_max_edge_length_factor(double value);
+
+  double get_mesh_optimizer_max_aspect_ratio() const;
+  void set_mesh_optimizer_max_aspect_ratio(double value);
+
+  double get_mesh_optimizer_small_component_area_factor() const;
+  void set_mesh_optimizer_small_component_area_factor(double value);
+
+  double get_mesh_optimizer_simplify_target_ratio() const;
+  void set_mesh_optimizer_simplify_target_ratio(double value);
+
+  double get_mesh_optimizer_simplify_abs_error_vox() const;
+  void set_mesh_optimizer_simplify_abs_error_vox(double value);
+
+  double get_mesh_optimizer_simplify_relative_error() const;
+  void set_mesh_optimizer_simplify_relative_error(double value);
+
+  bool get_mesh_optimizer_simplify_use_sloppy() const;
+  void set_mesh_optimizer_simplify_use_sloppy(bool value);
+
+  bool get_mesh_optimizer_simplify_lock_border() const;
+  void set_mesh_optimizer_simplify_lock_border(bool value);
+
+  bool get_mesh_optimizer_optimize_overdraw() const;
+  void set_mesh_optimizer_optimize_overdraw(bool value);
+
+  double get_mesh_optimizer_overdraw_threshold() const;
+  void set_mesh_optimizer_overdraw_threshold(double value);
+
+  std::shared_ptr<nvblox::MeshOptimizerParams> params_;
+};
+
 struct DecayIntegratorBaseParams : torch::CustomClassHolder {
   // Constructor
   DecayIntegratorBaseParams()
@@ -225,6 +270,10 @@ struct MapperParams : torch::CustomClassHolder {
   c10::intrusive_ptr<MeshIntegratorParams> get_mesh_integrator_params() const;
   void set_mesh_integrator_params(
       c10::intrusive_ptr<MeshIntegratorParams> params);
+
+  c10::intrusive_ptr<MeshOptimizerParams> get_mesh_optimizer_params() const;
+  void set_mesh_optimizer_params(
+      c10::intrusive_ptr<MeshOptimizerParams> params);
 
   c10::intrusive_ptr<DecayIntegratorBaseParams>
   get_decay_integrator_base_params() const;

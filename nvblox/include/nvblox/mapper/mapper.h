@@ -39,6 +39,7 @@ limitations under the License.
 #include "nvblox/map/layer_cake.h"
 #include "nvblox/map/voxels.h"
 #include "nvblox/mapper/mapper_params.h"
+#include "nvblox/mesh/mesh_block_optimizer.h"
 #include "nvblox/mesh/mesh_integrator.h"
 #include "nvblox/semantics/image_masker.h"
 #include "nvblox/sensors/camera.h"
@@ -809,6 +810,7 @@ class Mapper : public MapperBase {
   ColorMeshIntegrator color_mesh_integrator_;
   FeatureMeshIntegrator feature_mesh_integrator_;
   EsdfIntegrator esdf_integrator_;
+  MeshBlockOptimizerOptions mesh_block_optimizer_options_;
 
   // Layer Streamers
   LayerCakeStreamer layer_streamers_;

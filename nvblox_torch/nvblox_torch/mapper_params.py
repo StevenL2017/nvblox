@@ -78,6 +78,18 @@ class MeshIntegratorParams(NvbloxParameterClass):
         self.wrap_getter_and_setters(MeshIntegratorParams, self._c_params)
 
 
+class MeshOptimizerParams(NvbloxParameterClass):
+    """Parameters governing mesh post-processing and simplification."""
+
+    def __init__(self, c_params: Optional[object] = None) -> None:
+        """Construct from C++ object."""
+        if c_params is None:
+            self._c_params = get_nvblox_torch_class('MeshOptimizerParams')()
+        else:
+            self._c_params = c_params
+        self.wrap_getter_and_setters(MeshOptimizerParams, self._c_params)
+
+
 class DecayIntegratorBaseParams(NvbloxParameterClass):
     """Base parameters for the decay integrator."""
 
@@ -249,6 +261,14 @@ class MapperParams:
     def set_mesh_integrator_params(self, params: MeshIntegratorParams) -> None:
         """Parameter setter."""
         return self._c_params.set_mesh_integrator_params(params._c_params)
+
+    def get_mesh_optimizer_params(self) -> MeshOptimizerParams:
+        """Parameter getter."""
+        return MeshOptimizerParams(self._c_params.get_mesh_optimizer_params())
+
+    def set_mesh_optimizer_params(self, params: MeshOptimizerParams) -> None:
+        """Parameter setter."""
+        return self._c_params.set_mesh_optimizer_params(params._c_params)
 
     def get_decay_integrator_base_params(self) -> DecayIntegratorBaseParams:
         """Parameter getter."""

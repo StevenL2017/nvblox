@@ -700,6 +700,47 @@ void Mapper::setMapperParams(const MapperParams& params) {
   feature_mesh_integrator().weld_vertices(
       params.mesh_integrator_params.mesh_integrator_weld_vertices);
 
+  // ======= MESH OPTIMIZER =======
+  const auto& mesh_opt_params = params.mesh_optimizer_params;
+  mesh_block_optimizer_options_.enabled =
+      static_cast<bool>(mesh_opt_params.mesh_optimizer_enable);
+  const float min_area_factor = static_cast<float>(
+      mesh_opt_params.mesh_optimizer_min_triangle_area_factor);
+  mesh_block_optimizer_options_.min_triangle_area_m2 =
+      min_area_factor * voxel_size_m_ * voxel_size_m_;
+  const float max_edge_factor = static_cast<float>(
+      mesh_opt_params.mesh_optimizer_max_edge_length_factor);
+  mesh_block_optimizer_options_.max_edge_length_m =
+      max_edge_factor * voxel_size_m_;
+  mesh_block_optimizer_options_.max_aspect_ratio = static_cast<float>(
+      mesh_opt_params.mesh_optimizer_max_aspect_ratio);
+  const float small_component_factor = static_cast<float>(
+      mesh_opt_params.mesh_optimizer_small_component_area_factor);
+  mesh_block_optimizer_options_.small_component_area_m2 =
+      small_component_factor * voxel_size_m_ * voxel_size_m_;
+  const float target_ratio = static_cast<float>(
+      mesh_opt_params.mesh_optimizer_simplify_target_ratio);
+  mesh_block_optimizer_options_.simplify_target_ratio =
+      std::clamp(target_ratio, 0.0f, 1.0f);
+  const float abs_error_vox = static_cast<float>(
+      mesh_opt_params.mesh_optimizer_simplify_abs_error_vox);
+  mesh_block_optimizer_options_.simplify_abs_error_m =
+      abs_error_vox * voxel_size_m_;
+  const float relative_error = static_cast<float>(
+      mesh_opt_params.mesh_optimizer_simplify_relative_error);
+  mesh_block_optimizer_options_.simplify_relative_error =
+      std::max(relative_error, 0.0f);
+  mesh_block_optimizer_options_.simplify_use_sloppy = static_cast<bool>(
+      mesh_opt_params.mesh_optimizer_simplify_use_sloppy);
+  mesh_block_optimizer_options_.simplify_lock_border = static_cast<bool>(
+      mesh_opt_params.mesh_optimizer_simplify_lock_border);
+  mesh_block_optimizer_options_.optimize_overdraw = static_cast<bool>(
+      mesh_opt_params.mesh_optimizer_optimize_overdraw);
+  const float overdraw_threshold = static_cast<float>(
+      mesh_opt_params.mesh_optimizer_overdraw_threshold);
+  mesh_block_optimizer_options_.overdraw_threshold =
+      std::max(overdraw_threshold, 1.0f);
+
   // ======= DECAY INTEGRATOR (TSDF/OCCUPANCY)=======
   tsdf_decay_integrator().deallocate_decayed_blocks(
       params.decay_integrator_base_params
@@ -1087,6 +1128,19 @@ void Mapper::updateMeshTemplate(
     mesh_integrator.updateAppearance(layers_.get<AppearanceLayerType>(),
                                      blocks_to_update,
                                      layers_.getPtr<MeshLayerType>());
+
+    if (mesh_block_optimizer_options_.enabled) {
+      MeshLayerType* mesh_layer_ptr = layers_.getPtr<MeshLayerType>();
+      CHECK_NOTNULL(mesh_layer_ptr);
+      for (const Index3D& block_index : blocks_to_update) {
+        auto block = mesh_layer_ptr->getBlockAtIndex(block_index);
+        if (!block) {
+          continue;
+        }
+        optimizeMeshBlock(block.get(), mesh_block_optimizer_options_,
+                          *cuda_stream_);
+      }
+    }
 
     blocks_to_update_tracker_.markBlocksAsUpdated(blocks_to_update_type);
   }
