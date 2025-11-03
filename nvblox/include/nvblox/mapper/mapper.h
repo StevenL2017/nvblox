@@ -705,9 +705,9 @@ class Mapper : public MapperBase {
   const DepthImage& preprocessDepthImageAsync(
       const DepthImageConstView& depth_image);
 
-  /// Collect TSDF blocks that became newly observed in the current view.
+  /// Collect TSDF blocks that were newly updated and already allocated.
   std::vector<Index3D> collectBlocksToAdd(
-      const Transform& T_L_C, const Camera& camera, TsdfLayer* tsdf_layer_ptr,
+      TsdfLayer* tsdf_layer_ptr,
       const std::vector<Index3D>& updated_blocks);
 
   /// Collect TSDF blocks to clear using occlusion-aware filtering.

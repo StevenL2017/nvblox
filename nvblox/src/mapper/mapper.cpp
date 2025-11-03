@@ -22,40 +22,22 @@ limitations under the License.
 #include <utility>
 
 #include "nvblox/core/indexing.h"
-#include "nvblox/geometry/bounding_boxes.h"
-#include "nvblox/geometry/bounding_spheres.h"
 #include "nvblox/io/layer_cake_io.h"
 #include "nvblox/io/mesh_io.h"
 #include "nvblox/io/pointcloud_io.h"
 #include "nvblox/mapper/internal/mapper_common.h"
-#include "nvblox/utils/rates.h"
 
 namespace nvblox {
 
 std::vector<Index3D> Mapper::collectBlocksToAdd(
-    const Transform& T_L_C, const Camera& camera, TsdfLayer* tsdf_layer_ptr,
-    const std::vector<Index3D>& updated_blocks) {
+    TsdfLayer* tsdf_layer_ptr, const std::vector<Index3D>& updated_blocks) {
   std::vector<Index3D> blocks_to_add;
   if (tsdf_layer_ptr == nullptr || updated_blocks.empty()) {
     return blocks_to_add;
   }
 
-  const float block_size = tsdf_layer_ptr->block_size();
-  float max_distance = tsdf_integrator_.max_integration_distance_m();
-  if (max_distance <= 0.0f) {
-    max_distance = tsdf_integrator_.get_truncation_distance_m(voxel_size_m_);
-  }
-
-  std::vector<Index3D> frustum_blocks =
-      tsdf_integrator_.view_calculator().getBlocksInViewPlanes(
-          T_L_C, camera, block_size, max_distance);
-  Index3DSet blocks_in_view(frustum_blocks.begin(), frustum_blocks.end());
-
   blocks_to_add.reserve(updated_blocks.size());
   for (const Index3D& block_index : updated_blocks) {
-    if (blocks_in_view.find(block_index) == blocks_in_view.end()) {
-      continue;
-    }
     if (!tsdf_layer_ptr->isBlockAllocated(block_index)) {
       continue;
     }
@@ -652,8 +634,7 @@ void Mapper::integrateDepth(const MaskedDepthImageConstView& depth_frame,
         tsdf_layer_ptr, &updated_blocks);
 
     if (add_observed_blocks_in_fov_) {
-      blocks_to_add =
-          collectBlocksToAdd(T_L_C, camera, tsdf_layer_ptr, updated_blocks);
+      blocks_to_add = collectBlocksToAdd(tsdf_layer_ptr, updated_blocks);
     }
 
     if (clear_unobserved_blocks_in_fov_) {
