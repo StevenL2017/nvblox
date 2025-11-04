@@ -138,6 +138,129 @@ void MeshIntegratorParams::set_mesh_integrator_weld_vertices(bool value) {
 }
 
 /*****************************
+ * MESH OPTIMIZER PARAMS
+ ******************************/
+
+bool MeshOptimizerParams::get_mesh_optimizer_enable() const {
+  return params_->mesh_optimizer_enable;
+}
+
+void MeshOptimizerParams::set_mesh_optimizer_enable(bool value) {
+  params_->mesh_optimizer_enable = value;
+}
+
+double MeshOptimizerParams::get_mesh_optimizer_min_triangle_area_factor()
+    const {
+  return static_cast<double>(
+      params_->mesh_optimizer_min_triangle_area_factor);
+}
+
+void MeshOptimizerParams::set_mesh_optimizer_min_triangle_area_factor(
+    double value) {
+  params_->mesh_optimizer_min_triangle_area_factor =
+      static_cast<float>(value);
+}
+
+double MeshOptimizerParams::get_mesh_optimizer_max_edge_length_factor()
+    const {
+  return static_cast<double>(
+      params_->mesh_optimizer_max_edge_length_factor);
+}
+
+void MeshOptimizerParams::set_mesh_optimizer_max_edge_length_factor(
+    double value) {
+  params_->mesh_optimizer_max_edge_length_factor =
+      static_cast<float>(value);
+}
+
+double MeshOptimizerParams::get_mesh_optimizer_max_aspect_ratio() const {
+  return static_cast<double>(params_->mesh_optimizer_max_aspect_ratio);
+}
+
+void MeshOptimizerParams::set_mesh_optimizer_max_aspect_ratio(double value) {
+  params_->mesh_optimizer_max_aspect_ratio = static_cast<float>(value);
+}
+
+double MeshOptimizerParams::get_mesh_optimizer_small_component_area_factor()
+    const {
+  return static_cast<double>(
+      params_->mesh_optimizer_small_component_area_factor);
+}
+
+void MeshOptimizerParams::set_mesh_optimizer_small_component_area_factor(
+    double value) {
+  params_->mesh_optimizer_small_component_area_factor =
+      static_cast<float>(value);
+}
+
+double MeshOptimizerParams::get_mesh_optimizer_simplify_target_ratio() const {
+  return static_cast<double>(
+      params_->mesh_optimizer_simplify_target_ratio);
+}
+
+void MeshOptimizerParams::set_mesh_optimizer_simplify_target_ratio(
+    double value) {
+  params_->mesh_optimizer_simplify_target_ratio =
+      static_cast<float>(value);
+}
+
+double MeshOptimizerParams::get_mesh_optimizer_simplify_abs_error_vox()
+    const {
+  return static_cast<double>(
+      params_->mesh_optimizer_simplify_abs_error_vox);
+}
+
+void MeshOptimizerParams::set_mesh_optimizer_simplify_abs_error_vox(
+    double value) {
+  params_->mesh_optimizer_simplify_abs_error_vox =
+      static_cast<float>(value);
+}
+
+double MeshOptimizerParams::get_mesh_optimizer_simplify_relative_error()
+    const {
+  return static_cast<double>(
+      params_->mesh_optimizer_simplify_relative_error);
+}
+
+void MeshOptimizerParams::set_mesh_optimizer_simplify_relative_error(
+    double value) {
+  params_->mesh_optimizer_simplify_relative_error =
+      static_cast<float>(value);
+}
+
+bool MeshOptimizerParams::get_mesh_optimizer_simplify_use_sloppy() const {
+  return params_->mesh_optimizer_simplify_use_sloppy;
+}
+
+void MeshOptimizerParams::set_mesh_optimizer_simplify_use_sloppy(bool value) {
+  params_->mesh_optimizer_simplify_use_sloppy = value;
+}
+
+bool MeshOptimizerParams::get_mesh_optimizer_simplify_lock_border() const {
+  return params_->mesh_optimizer_simplify_lock_border;
+}
+
+void MeshOptimizerParams::set_mesh_optimizer_simplify_lock_border(bool value) {
+  params_->mesh_optimizer_simplify_lock_border = value;
+}
+
+bool MeshOptimizerParams::get_mesh_optimizer_optimize_overdraw() const {
+  return params_->mesh_optimizer_optimize_overdraw;
+}
+
+void MeshOptimizerParams::set_mesh_optimizer_optimize_overdraw(bool value) {
+  params_->mesh_optimizer_optimize_overdraw = value;
+}
+
+double MeshOptimizerParams::get_mesh_optimizer_overdraw_threshold() const {
+  return static_cast<double>(params_->mesh_optimizer_overdraw_threshold);
+}
+
+void MeshOptimizerParams::set_mesh_optimizer_overdraw_threshold(double value) {
+  params_->mesh_optimizer_overdraw_threshold = static_cast<float>(value);
+}
+
+/*****************************
  * DECAY INTEGRATOR BASE PARAMS
  ******************************/
 
@@ -396,6 +519,17 @@ void MapperParams::set_mesh_integrator_params(
   params_->mesh_integrator_params = *params->params_;
 }
 
+c10::intrusive_ptr<MeshOptimizerParams>
+MapperParams::get_mesh_optimizer_params() const {
+  return c10::make_intrusive<MeshOptimizerParams>(
+      params_->mesh_optimizer_params);
+}
+
+void MapperParams::set_mesh_optimizer_params(
+    c10::intrusive_ptr<MeshOptimizerParams> params) {
+  params_->mesh_optimizer_params = *params->params_;
+}
+
 c10::intrusive_ptr<DecayIntegratorBaseParams>
 MapperParams::get_decay_integrator_base_params() const {
   return c10::make_intrusive<DecayIntegratorBaseParams>(
@@ -469,60 +603,20 @@ void MapperParams::set_do_depth_preprocessing(bool value) const {
   params_->do_depth_preprocessing = value;
 }
 
+bool MapperParams::get_add_observed_blocks_in_fov() const {
+  return params_->add_observed_blocks_in_fov;
+}
+
+void MapperParams::set_add_observed_blocks_in_fov(bool value) const {
+  params_->add_observed_blocks_in_fov = value;
+}
+
 bool MapperParams::get_clear_unobserved_blocks_in_fov() const {
   return params_->clear_unobserved_blocks_in_fov;
 }
 
 void MapperParams::set_clear_unobserved_blocks_in_fov(bool value) const {
   params_->clear_unobserved_blocks_in_fov = value;
-}
-
-bool MapperParams::get_filter_small_tsdf_block_updates() const {
-  return params_->filter_small_tsdf_block_updates;
-}
-
-void MapperParams::set_filter_small_tsdf_block_updates(bool value) const {
-  params_->filter_small_tsdf_block_updates = value;
-}
-
-double MapperParams::get_tsdf_filter_zc_ratio_epsilon() const {
-  return static_cast<double>(params_->tsdf_filter_zc_ratio_epsilon);
-}
-
-void MapperParams::set_tsdf_filter_zc_ratio_epsilon(double value) const {
-  params_->tsdf_filter_zc_ratio_epsilon = static_cast<float>(value);
-}
-
-double MapperParams::get_tsdf_filter_iou_tolerance() const {
-  return static_cast<double>(params_->tsdf_filter_iou_tolerance);
-}
-
-void MapperParams::set_tsdf_filter_iou_tolerance(double value) const {
-  params_->tsdf_filter_iou_tolerance = static_cast<float>(value);
-}
-
-double MapperParams::get_tsdf_filter_l1_q75_threshold() const {
-  return static_cast<double>(params_->tsdf_filter_l1_q75_threshold);
-}
-
-void MapperParams::set_tsdf_filter_l1_q75_threshold(double value) const {
-  params_->tsdf_filter_l1_q75_threshold = static_cast<float>(value);
-}
-
-double MapperParams::get_tsdf_filter_near_zero_band_m() const {
-  return static_cast<double>(params_->tsdf_filter_near_zero_band_m);
-}
-
-void MapperParams::set_tsdf_filter_near_zero_band_m(double value) const {
-  params_->tsdf_filter_near_zero_band_m = static_cast<float>(value);
-}
-
-double MapperParams::get_tsdf_filter_min_weight() const {
-  return static_cast<double>(params_->tsdf_filter_min_weight);
-}
-
-void MapperParams::set_tsdf_filter_min_weight(double value) const {
-  params_->tsdf_filter_min_weight = static_cast<float>(value);
 }
 
 }  // namespace pynvblox

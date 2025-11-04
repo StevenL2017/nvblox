@@ -78,6 +78,18 @@ class MeshIntegratorParams(NvbloxParameterClass):
         self.wrap_getter_and_setters(MeshIntegratorParams, self._c_params)
 
 
+class MeshOptimizerParams(NvbloxParameterClass):
+    """Parameters governing mesh post-processing and simplification."""
+
+    def __init__(self, c_params: Optional[object] = None) -> None:
+        """Construct from C++ object."""
+        if c_params is None:
+            self._c_params = get_nvblox_torch_class('MeshOptimizerParams')()
+        else:
+            self._c_params = c_params
+        self.wrap_getter_and_setters(MeshOptimizerParams, self._c_params)
+
+
 class DecayIntegratorBaseParams(NvbloxParameterClass):
     """Base parameters for the decay integrator."""
 
@@ -172,6 +184,15 @@ class MapperParams:
         self._c_params.set_do_depth_preprocessing(bool(value))
 
     @property
+    def add_observed_blocks_in_fov(self) -> bool:
+        """Whether to collect newly observed TSDF blocks in the current frustum."""
+        return bool(self._c_params.get_add_observed_blocks_in_fov())
+
+    @add_observed_blocks_in_fov.setter
+    def add_observed_blocks_in_fov(self, value: bool) -> None:
+        self._c_params.set_add_observed_blocks_in_fov(bool(value))
+
+    @property
     def clear_unobserved_blocks_in_fov(self) -> bool:
         """Whether to clear unobserved TSDF blocks in the current frustum."""
         return bool(self._c_params.get_clear_unobserved_blocks_in_fov())
@@ -179,60 +200,6 @@ class MapperParams:
     @clear_unobserved_blocks_in_fov.setter
     def clear_unobserved_blocks_in_fov(self, value: bool) -> None:
         self._c_params.set_clear_unobserved_blocks_in_fov(bool(value))
-
-    @property
-    def filter_small_tsdf_block_updates(self) -> bool:
-        """Whether to filter unchanged TSDF blocks when reporting updates."""
-        return bool(self._c_params.get_filter_small_tsdf_block_updates())
-
-    @filter_small_tsdf_block_updates.setter
-    def filter_small_tsdf_block_updates(self, value: bool) -> None:
-        self._c_params.set_filter_small_tsdf_block_updates(bool(value))
-
-    @property
-    def tsdf_filter_zc_ratio_epsilon(self) -> float:
-        """Zero-crossing relative change threshold for block filtering."""
-        return float(self._c_params.get_tsdf_filter_zc_ratio_epsilon())
-
-    @tsdf_filter_zc_ratio_epsilon.setter
-    def tsdf_filter_zc_ratio_epsilon(self, value: float) -> None:
-        self._c_params.set_tsdf_filter_zc_ratio_epsilon(float(value))
-
-    @property
-    def tsdf_filter_iou_tolerance(self) -> float:
-        """IoU tolerance for the near-zero mask comparison."""
-        return float(self._c_params.get_tsdf_filter_iou_tolerance())
-
-    @tsdf_filter_iou_tolerance.setter
-    def tsdf_filter_iou_tolerance(self, value: float) -> None:
-        self._c_params.set_tsdf_filter_iou_tolerance(float(value))
-
-    @property
-    def tsdf_filter_l1_q75_threshold(self) -> float:
-        """Distance change threshold for TSDF block update filtering."""
-        return float(self._c_params.get_tsdf_filter_l1_q75_threshold())
-
-    @tsdf_filter_l1_q75_threshold.setter
-    def tsdf_filter_l1_q75_threshold(self, value: float) -> None:
-        self._c_params.set_tsdf_filter_l1_q75_threshold(float(value))
-
-    @property
-    def tsdf_filter_near_zero_band_m(self) -> float:
-        """Half-width of the near-zero band used for filtering."""
-        return float(self._c_params.get_tsdf_filter_near_zero_band_m())
-
-    @tsdf_filter_near_zero_band_m.setter
-    def tsdf_filter_near_zero_band_m(self, value: float) -> None:
-        self._c_params.set_tsdf_filter_near_zero_band_m(float(value))
-
-    @property
-    def tsdf_filter_min_weight(self) -> float:
-        """Weight change threshold for TSDF block update filtering."""
-        return float(self._c_params.get_tsdf_filter_min_weight())
-
-    @tsdf_filter_min_weight.setter
-    def tsdf_filter_min_weight(self, value: float) -> None:
-        self._c_params.set_tsdf_filter_min_weight(float(value))
 
     def get_projective_integrator_params(self) -> ProjectiveIntegratorParams:
         """Parameter getter."""
@@ -249,6 +216,14 @@ class MapperParams:
     def set_mesh_integrator_params(self, params: MeshIntegratorParams) -> None:
         """Parameter setter."""
         return self._c_params.set_mesh_integrator_params(params._c_params)
+
+    def get_mesh_optimizer_params(self) -> MeshOptimizerParams:
+        """Parameter getter."""
+        return MeshOptimizerParams(self._c_params.get_mesh_optimizer_params())
+
+    def set_mesh_optimizer_params(self, params: MeshOptimizerParams) -> None:
+        """Parameter setter."""
+        return self._c_params.set_mesh_optimizer_params(params._c_params)
 
     def get_decay_integrator_base_params(self) -> DecayIntegratorBaseParams:
         """Parameter getter."""

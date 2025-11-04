@@ -22,17 +22,30 @@ limitations under the License.
 #include <utility>
 
 #include "nvblox/core/indexing.h"
-#include "nvblox/geometry/bounding_boxes.h"
-#include "nvblox/geometry/bounding_spheres.h"
 #include "nvblox/io/layer_cake_io.h"
 #include "nvblox/io/mesh_io.h"
 #include "nvblox/io/pointcloud_io.h"
 #include "nvblox/mapper/internal/mapper_common.h"
-#include "nvblox/utils/rates.h"
 
 namespace nvblox {
 
-namespace {
+std::vector<Index3D> Mapper::collectBlocksToAdd(
+    TsdfLayer* tsdf_layer_ptr, const std::vector<Index3D>& updated_blocks) {
+  std::vector<Index3D> blocks_to_add;
+  if (tsdf_layer_ptr == nullptr || updated_blocks.empty()) {
+    return blocks_to_add;
+  }
+
+  blocks_to_add.reserve(updated_blocks.size());
+  for (const Index3D& block_index : updated_blocks) {
+    if (!tsdf_layer_ptr->isBlockAllocated(block_index)) {
+      continue;
+    }
+    blocks_to_add.push_back(block_index);
+  }
+
+  return blocks_to_add;
+}
 
 std::vector<Index3D> filterBlocksWithOcclusion(
     const std::vector<Index3D>& blocks_to_clear_pre,
@@ -181,8 +194,6 @@ std::vector<Index3D> filterBlocksWithOcclusion(
   return blocks_to_clear;
 }
 
-}  // namespace
-
 std::vector<Index3D> Mapper::collectBlocksToClear(
     const Transform& T_L_C, const Camera& camera,
     TsdfLayer* tsdf_layer_ptr, const std::vector<Index3D>& updated_blocks,
@@ -230,253 +241,6 @@ std::vector<Index3D> Mapper::collectBlocksToClear(
   return filterBlocksWithOcclusion(blocks_to_clear_pre, tsdf_layer_ptr,
                                    block_size, depth_image_for_integration,
                                    T_L_C, camera, cuda_stream_.get());
-}
-
-namespace {
-
-inline int popcount64(uint64_t value) {
-  int count = 0;
-  while (value != 0u) {
-    value &= (value - 1u);
-    ++count;
-  }
-  return count;
-}
-
-}  // namespace
-
-Mapper::TsdfBlockSignature Mapper::computeTsdfBlockSignature(
-    const TsdfLayer::BlockType& block) const {
-  TsdfBlockSignature signature;
-  const int vox_per_side = TsdfLayer::BlockType::kVoxelsPerSide;
-  const int num_voxels = TsdfLayer::BlockType::kNumVoxels;
-  signature.distances.resize(num_voxels);
-  signature.weights.resize(num_voxels);
-
-  const int macro_dim = tsdf_filter_macro_subdivisions_;
-  CHECK_GT(macro_dim, 0);
-  CHECK_EQ(vox_per_side % macro_dim, 0)
-      << "Macro subdivision must divide voxels per side.";
-  const int macro_stride = vox_per_side / macro_dim;
-  const float min_weight = tsdf_filter_min_weight_;
-  const float band = (tsdf_filter_near_zero_band_m_ > 0.0f)
-                         ? tsdf_filter_near_zero_band_m_
-                         : 2.0f * voxel_size_m_;
-
-  // Cache per-voxel values
-  int linear_index = 0;
-  for (int x = 0; x < vox_per_side; ++x) {
-    for (int y = 0; y < vox_per_side; ++y) {
-      for (int z = 0; z < vox_per_side; ++z, ++linear_index) {
-        const TsdfVoxel& voxel = block.voxels[x][y][z];
-        signature.distances[linear_index] = voxel.distance;
-        signature.weights[linear_index] = voxel.weight;
-      }
-    }
-  }
-
-  // Zero crossing cells
-  for (int x = 0; x < vox_per_side - 1; ++x) {
-    for (int y = 0; y < vox_per_side - 1; ++y) {
-      for (int z = 0; z < vox_per_side - 1; ++z) {
-        float min_distance = std::numeric_limits<float>::infinity();
-        float max_distance = -std::numeric_limits<float>::infinity();
-        bool all_valid = true;
-        for (int dx = 0; dx <= 1; ++dx) {
-          for (int dy = 0; dy <= 1; ++dy) {
-            for (int dz = 0; dz <= 1; ++dz) {
-              const int vx = x + dx;
-              const int vy = y + dy;
-              const int vz = z + dz;
-              const int idx = vx * vox_per_side * vox_per_side +
-                              vy * vox_per_side + vz;
-              const float weight = signature.weights[idx];
-              if (weight < min_weight) {
-                all_valid = false;
-                break;
-              }
-              const float dist = signature.distances[idx];
-              min_distance = std::min(min_distance, dist);
-              max_distance = std::max(max_distance, dist);
-            }
-            if (!all_valid) {
-              break;
-            }
-          }
-          if (!all_valid) {
-            break;
-          }
-        }
-        if (all_valid && min_distance < 0.0f && max_distance > 0.0f) {
-          ++signature.zero_crossing_cell_count;
-        }
-      }
-    }
-  }
-
-  // Near zero mask (macro grid)
-  for (int mx = 0; mx < macro_dim; ++mx) {
-    for (int my = 0; my < macro_dim; ++my) {
-      for (int mz = 0; mz < macro_dim; ++mz) {
-        bool has_near_zero = false;
-        for (int lx = 0; lx < macro_stride && !has_near_zero; ++lx) {
-          for (int ly = 0; ly < macro_stride && !has_near_zero; ++ly) {
-            for (int lz = 0; lz < macro_stride; ++lz) {
-              const int vx = mx * macro_stride + lx;
-              const int vy = my * macro_stride + ly;
-              const int vz = mz * macro_stride + lz;
-              const int idx = vx * vox_per_side * vox_per_side +
-                              vy * vox_per_side + vz;
-              if (signature.weights[idx] >= min_weight &&
-                  std::fabs(signature.distances[idx]) < band) {
-                has_near_zero = true;
-                break;
-              }
-            }
-          }
-        }
-        if (has_near_zero) {
-          const int bit_index =
-              mx * macro_dim * macro_dim + my * macro_dim + mz;
-          signature.near_zero_mask |= (uint64_t(1) << bit_index);
-        }
-      }
-    }
-  }
-
-  return signature;
-}
-
-float Mapper::computeZeroCrossingRelativeChange(
-    const TsdfBlockSignature& previous,
-    const TsdfBlockSignature& current) const {
-  const int prev = previous.zero_crossing_cell_count;
-  const int curr = current.zero_crossing_cell_count;
-  if (prev == 0) {
-    if (curr == 0) {
-      return 0.0f;
-    }
-    return std::numeric_limits<float>::infinity();
-  }
-  return std::fabs(static_cast<float>(curr - prev)) /
-         static_cast<float>(prev);
-}
-
-float Mapper::computeNearZeroMaskIou(const TsdfBlockSignature& previous,
-                                     const TsdfBlockSignature& current) const {
-  const uint64_t mask_prev = previous.near_zero_mask;
-  const uint64_t mask_curr = current.near_zero_mask;
-  const uint64_t intersection = mask_prev & mask_curr;
-  const uint64_t uni = mask_prev | mask_curr;
-  const int union_count = popcount64(uni);
-  if (union_count == 0) {
-    return 1.0f;
-  }
-  const int intersection_count = popcount64(intersection);
-  return static_cast<float>(intersection_count) /
-         static_cast<float>(union_count);
-}
-
-float Mapper::computeNearZeroDeltaQuantile(
-    const TsdfBlockSignature& previous,
-    const TsdfBlockSignature& current, float quantile) const {
-  CHECK_GE(quantile, 0.0f);
-  CHECK_LE(quantile, 1.0f);
-  const int num_voxels = TsdfLayer::BlockType::kNumVoxels;
-  std::vector<float> deltas;
-  deltas.reserve(num_voxels / 4);
-  const float band = (tsdf_filter_near_zero_band_m_ > 0.0f)
-                         ? tsdf_filter_near_zero_band_m_
-                         : 2.0f * voxel_size_m_;
-  const float min_weight = tsdf_filter_min_weight_;
-  for (int idx = 0; idx < num_voxels; ++idx) {
-    const bool prev_valid =
-        (previous.weights[idx] >= min_weight) &&
-        (std::fabs(previous.distances[idx]) < band);
-    const bool curr_valid =
-        (current.weights[idx] >= min_weight) &&
-        (std::fabs(current.distances[idx]) < band);
-    if (!prev_valid && !curr_valid) {
-      continue;
-    }
-    deltas.emplace_back(
-        std::fabs(current.distances[idx] - previous.distances[idx]));
-  }
-  if (deltas.empty()) {
-    return 0.0f;
-  }
-  const float max_index = static_cast<float>(deltas.size() - 1);
-  float raw_index = quantile * max_index;
-  raw_index = std::max(0.0f, std::min(raw_index, max_index));
-  const size_t kth_index = static_cast<size_t>(raw_index);
-  std::nth_element(deltas.begin(), deltas.begin() + kth_index, deltas.end());
-  return deltas[kth_index];
-}
-
-bool Mapper::tsdfBlockChangeIsSignificant(
-    const TsdfBlockSignature& previous,
-    const TsdfBlockSignature& current) const {
-  const float zc_ratio =
-      computeZeroCrossingRelativeChange(previous, current);
-  if (zc_ratio > tsdf_filter_zc_ratio_epsilon_) {
-    return true;
-  }
-
-  const float iou = computeNearZeroMaskIou(previous, current);
-  if ((1.0f - iou) > tsdf_filter_iou_tolerance_) {
-    return true;
-  }
-
-  const float q75 =
-      computeNearZeroDeltaQuantile(previous, current, 0.75f);
-  if (q75 > tsdf_filter_l1_q75_threshold_) {
-    return true;
-  }
-  return false;
-}
-
-std::vector<Index3D> Mapper::filterBlocksWithSmallTsdfChange(
-    const std::vector<Index3D>& candidate_blocks,
-    TsdfLayer* tsdf_layer_ptr) {
-  if (!filter_small_tsdf_block_updates_ || tsdf_layer_ptr == nullptr) {
-    return candidate_blocks;
-  }
-
-  std::vector<Index3D> significant_blocks;
-  significant_blocks.reserve(candidate_blocks.size());
-
-  for (const Index3D& block_index : candidate_blocks) {
-    auto block_ptr = tsdf_layer_ptr->getBlockAtIndex(block_index);
-    if (!block_ptr) {
-      continue;
-    }
-
-    auto block_host = block_ptr;
-    if (block_ptr.memory_type() == MemoryType::kDevice) {
-      block_host = block_ptr.clone(MemoryType::kHost);
-    }
-    TsdfBlockSignature current_signature =
-        computeTsdfBlockSignature(*block_host);
-
-    const auto previous_it =
-        last_reported_tsdf_block_signatures_.find(block_index);
-    if (previous_it == last_reported_tsdf_block_signatures_.end() ||
-        tsdfBlockChangeIsSignificant(previous_it->second,
-                                     current_signature)) {
-      significant_blocks.push_back(block_index);
-      last_reported_tsdf_block_signatures_[block_index] =
-          std::move(current_signature);
-    }
-  }
-
-  return significant_blocks;
-}
-
-void Mapper::forgetTsdfBlockSignatures(
-    const std::vector<Index3D>& block_indices) {
-  for (const Index3D& block_index : block_indices) {
-    last_reported_tsdf_block_signatures_.erase(block_index);
-  }
 }
 
 Mapper::Mapper(float voxel_size_m,
@@ -560,20 +324,9 @@ void Mapper::setMapperParams(const MapperParams& params) {
 
   // Decay
   exclude_last_view_from_decay(params.exclude_last_view_from_decay);
+
+  add_observed_blocks_in_fov(params.add_observed_blocks_in_fov);
   clear_unobserved_blocks_in_fov(params.clear_unobserved_blocks_in_fov);
-  filter_small_tsdf_block_updates(
-      params.filter_small_tsdf_block_updates);
-  tsdf_block_filter_zc_ratio_epsilon(
-      params.tsdf_filter_zc_ratio_epsilon);
-  tsdf_block_filter_iou_tolerance(
-      params.tsdf_filter_iou_tolerance);
-  tsdf_block_filter_l1_q75_threshold(params.tsdf_filter_l1_q75_threshold);
-  float band_m = params.tsdf_filter_near_zero_band_m;
-  if (band_m <= 0.0f) {
-    band_m = 2.0f * voxel_size_m_;
-  }
-  tsdf_block_filter_near_zero_band_m(band_m);
-  tsdf_block_filter_min_weight(params.tsdf_filter_min_weight);
 
   // ======= PROJECTIVE INTEGRATOR (TSDF/COLOR/OCCUPANCY)
   // max integration distance
@@ -699,6 +452,47 @@ void Mapper::setMapperParams(const MapperParams& params) {
       params.mesh_integrator_params.mesh_integrator_min_weight);
   feature_mesh_integrator().weld_vertices(
       params.mesh_integrator_params.mesh_integrator_weld_vertices);
+
+  // ======= MESH OPTIMIZER =======
+  const auto& mesh_opt_params = params.mesh_optimizer_params;
+  mesh_block_optimizer_options_.enabled =
+      static_cast<bool>(mesh_opt_params.mesh_optimizer_enable);
+  const float min_area_factor = static_cast<float>(
+      mesh_opt_params.mesh_optimizer_min_triangle_area_factor);
+  mesh_block_optimizer_options_.min_triangle_area_m2 =
+      min_area_factor * voxel_size_m_ * voxel_size_m_;
+  const float max_edge_factor = static_cast<float>(
+      mesh_opt_params.mesh_optimizer_max_edge_length_factor);
+  mesh_block_optimizer_options_.max_edge_length_m =
+      max_edge_factor * voxel_size_m_;
+  mesh_block_optimizer_options_.max_aspect_ratio = static_cast<float>(
+      mesh_opt_params.mesh_optimizer_max_aspect_ratio);
+  const float small_component_factor = static_cast<float>(
+      mesh_opt_params.mesh_optimizer_small_component_area_factor);
+  mesh_block_optimizer_options_.small_component_area_m2 =
+      small_component_factor * voxel_size_m_ * voxel_size_m_;
+  const float target_ratio = static_cast<float>(
+      mesh_opt_params.mesh_optimizer_simplify_target_ratio);
+  mesh_block_optimizer_options_.simplify_target_ratio =
+      std::clamp(target_ratio, 0.0f, 1.0f);
+  const float abs_error_vox = static_cast<float>(
+      mesh_opt_params.mesh_optimizer_simplify_abs_error_vox);
+  mesh_block_optimizer_options_.simplify_abs_error_m =
+      abs_error_vox * voxel_size_m_;
+  const float relative_error = static_cast<float>(
+      mesh_opt_params.mesh_optimizer_simplify_relative_error);
+  mesh_block_optimizer_options_.simplify_relative_error =
+      std::max(relative_error, 0.0f);
+  mesh_block_optimizer_options_.simplify_use_sloppy = static_cast<bool>(
+      mesh_opt_params.mesh_optimizer_simplify_use_sloppy);
+  mesh_block_optimizer_options_.simplify_lock_border = static_cast<bool>(
+      mesh_opt_params.mesh_optimizer_simplify_lock_border);
+  mesh_block_optimizer_options_.optimize_overdraw = static_cast<bool>(
+      mesh_opt_params.mesh_optimizer_optimize_overdraw);
+  const float overdraw_threshold = static_cast<float>(
+      mesh_opt_params.mesh_optimizer_overdraw_threshold);
+  mesh_block_optimizer_options_.overdraw_threshold =
+      std::max(overdraw_threshold, 1.0f);
 
   // ======= DECAY INTEGRATOR (TSDF/OCCUPANCY)=======
   tsdf_decay_integrator().deallocate_decayed_blocks(
@@ -830,6 +624,7 @@ void Mapper::integrateDepth(const MaskedDepthImageConstView& depth_frame,
 
   // Call the integrator.
   std::vector<Index3D> updated_blocks;
+  std::vector<Index3D> blocks_to_add;
   std::vector<Index3D> cleared_blocks_in_view;
   std::vector<Index3D> blocks_to_signal_updates;
   if (hasTsdfLayer(projective_layer_type_)) {
@@ -837,6 +632,10 @@ void Mapper::integrateDepth(const MaskedDepthImageConstView& depth_frame,
     tsdf_integrator_.integrateFrame(
         MaskedDepthImageConstView(depth_image_for_integration), T_L_C, camera,
         tsdf_layer_ptr, &updated_blocks);
+
+    if (add_observed_blocks_in_fov_) {
+      blocks_to_add = collectBlocksToAdd(tsdf_layer_ptr, updated_blocks);
+    }
 
     if (clear_unobserved_blocks_in_fov_) {
       std::vector<Index3D> blocks_to_clear =
@@ -850,11 +649,12 @@ void Mapper::integrateDepth(const MaskedDepthImageConstView& depth_frame,
       }
     }
 
-    std::vector<Index3D> significant_blocks =
-        filterBlocksWithSmallTsdfChange(updated_blocks, tsdf_layer_ptr);
-
     tsdf_layer_ptr->updateGpuHash(*cuda_stream_);
-    blocks_to_signal_updates = std::move(significant_blocks);
+    if (add_observed_blocks_in_fov_) {
+      blocks_to_signal_updates = blocks_to_add;
+    } else {
+      blocks_to_signal_updates = updated_blocks;
+    }
     blocks_to_signal_updates.insert(blocks_to_signal_updates.end(),
                                     cleared_blocks_in_view.begin(),
                                     cleared_blocks_in_view.end());
@@ -1088,6 +888,19 @@ void Mapper::updateMeshTemplate(
                                      blocks_to_update,
                                      layers_.getPtr<MeshLayerType>());
 
+    if (mesh_block_optimizer_options_.enabled) {
+      MeshLayerType* mesh_layer_ptr = layers_.getPtr<MeshLayerType>();
+      CHECK_NOTNULL(mesh_layer_ptr);
+      for (const Index3D& block_index : blocks_to_update) {
+        auto block = mesh_layer_ptr->getBlockAtIndex(block_index);
+        if (!block) {
+          continue;
+        }
+        optimizeMeshBlock(block.get(), mesh_block_optimizer_options_,
+                          *cuda_stream_);
+      }
+    }
+
     blocks_to_update_tracker_.markBlocksAsUpdated(blocks_to_update_type);
   }
 }
@@ -1243,7 +1056,6 @@ std::vector<Index3D> Mapper::getBlocksToUpdate(
 }
 
 void Mapper::clearBlocksInLayers(const std::vector<Index3D>& blocks_to_clear) {
-  forgetTsdfBlockSignatures(blocks_to_clear);
   // Clear the mesh and color blocks.
   layers_.getPtr<ColorLayer>()->clearBlocksAsync(blocks_to_clear,
                                                  *cuda_stream_);
@@ -1424,6 +1236,8 @@ parameters::ParameterTreeNode Mapper::getParameterTree(
                          depth_preprocessing_num_dilations_),
        ParameterTreeNode("exclude_last_view_from_decay",
                          exclude_last_view_from_decay_),
+       ParameterTreeNode("add_observed_blocks_in_fov",
+                         add_observed_blocks_in_fov_),
        ParameterTreeNode("clear_unobserved_blocks_in_fov",
                          clear_unobserved_blocks_in_fov_),
        tsdf_integrator_.getParameterTree("camera_tsdf_integrator"),
