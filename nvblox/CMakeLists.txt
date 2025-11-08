@@ -110,6 +110,7 @@ add_nvblox_shared_library(
   src/integrators/esdf_slicer.cu
   src/integrators/viewpoint.cpp
   src/rays/sphere_tracer.cu
+  src/tracking/depth_to_tsdf_icp.cu
   src/interpolation/interpolation_3d.cpp
   src/io/mesh_io.cpp
   src/io/ply_writer.cpp

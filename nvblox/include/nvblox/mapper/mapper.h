@@ -40,6 +40,7 @@ limitations under the License.
 #include "nvblox/mapper/mapper_params.h"
 #include "nvblox/mesh/mesh_block_optimizer.h"
 #include "nvblox/mesh/mesh_integrator.h"
+#include "nvblox/tracking/depth_to_tsdf_icp.h"
 #include "nvblox/semantics/image_masker.h"
 #include "nvblox/sensors/camera.h"
 #include "nvblox/sensors/depth_preprocessing.h"
@@ -764,6 +765,7 @@ class Mapper : public MapperBase {
   DepthPreprocessor depth_preprocessor_;
   std::shared_ptr<DepthImage> preprocessed_depth_image_ =
       std::make_shared<DepthImage>(MemoryType::kDevice);
+  DepthToTsdfICP depth_to_tsdf_icp_;
 
   /// Helper to keep track of which blocks need to be updated on the next
   /// calls to updateColorMesh(), updateFeatureMesh(), updateFreespace() upd

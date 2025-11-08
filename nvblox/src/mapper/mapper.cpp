@@ -18,6 +18,7 @@ limitations under the License.
 #include <algorithm>
 #include <cstddef>
 #include <cmath>
+#include <iostream>
 #include <limits>
 #include <utility>
 
@@ -262,6 +263,7 @@ Mapper::Mapper(float voxel_size_m,
       feature_mesh_integrator_(cuda_stream),
       esdf_integrator_(cuda_stream),
       depth_preprocessor_(cuda_stream),
+      depth_to_tsdf_icp_(cuda_stream),
       blocks_to_update_tracker_(projective_layer_type) {
   layers_ = LayerCake::create<TsdfLayer, ColorLayer, FeatureLayer,
                               FreespaceLayer, OccupancyLayer, EsdfLayer,
@@ -294,6 +296,7 @@ Mapper::Mapper(const std::string& map_filepath,
       feature_mesh_integrator_(cuda_stream),
       esdf_integrator_(cuda_stream),
       depth_preprocessor_(cuda_stream),
+      depth_to_tsdf_icp_(cuda_stream),
       blocks_to_update_tracker_(kDefaultProjectiveLayerType) {
   loadMap(map_filepath, block_memory_pool_params);
 }
@@ -622,6 +625,8 @@ void Mapper::integrateDepth(const MaskedDepthImageConstView& depth_frame,
         preprocessDepthImageAsync(depth_frame), depth_frame.mask());
   }
 
+  Transform T_L_C_refined = T_L_C;
+
   // Call the integrator.
   std::vector<Index3D> updated_blocks;
   std::vector<Index3D> blocks_to_add;
@@ -629,18 +634,45 @@ void Mapper::integrateDepth(const MaskedDepthImageConstView& depth_frame,
   std::vector<Index3D> blocks_to_signal_updates;
   if (hasTsdfLayer(projective_layer_type_)) {
     TsdfLayer* tsdf_layer_ptr = layers_.getPtr<TsdfLayer>();
+    bool tsdf_has_active_blocks = false;
+    if (tsdf_layer_ptr != nullptr) {
+      const std::vector<Index3D> allocated_blocks =
+          tsdf_layer_ptr->getAllBlockIndices();
+      tsdf_has_active_blocks = !allocated_blocks.empty();
+    }
+    if (tsdf_has_active_blocks) {
+      MaskedDepthImageConstView icp_depth_view;
+      DepthToTsdfIcpResult icp_result;
+      const float truncation_distance_m =
+          tsdf_integrator_.get_truncation_distance_m(voxel_size_m_);
+      const bool icp_success = depth_to_tsdf_icp_.refinePoseAndMask(
+          depth_image_for_integration, camera, *tsdf_layer_ptr,
+          voxel_size_m_, truncation_distance_m, &T_L_C_refined,
+          &icp_depth_view, &icp_result);
+      if (!icp_success) {
+        std::cout << "[Mapper] Warning: depth integration skipped after ICP "
+                     "rejection (inlier_ratio="
+                  << icp_result.inlier_ratio
+                  << ", mean_residual_m=" << icp_result.mean_abs_residual_m
+                  << ")\n";
+        return;
+      }
+      depth_image_for_integration = icp_depth_view;
+    }
     tsdf_integrator_.integrateFrame(
-        MaskedDepthImageConstView(depth_image_for_integration), T_L_C, camera,
+        MaskedDepthImageConstView(depth_image_for_integration), T_L_C_refined,
+        camera,
         tsdf_layer_ptr, &updated_blocks);
 
     if (add_observed_blocks_in_fov_) {
-      blocks_to_add = collectBlocksToAdd(tsdf_layer_ptr, updated_blocks);
+      blocks_to_add =
+          collectBlocksToAdd(tsdf_layer_ptr, updated_blocks);
     }
 
     if (clear_unobserved_blocks_in_fov_) {
       std::vector<Index3D> blocks_to_clear =
-          collectBlocksToClear(T_L_C, camera, tsdf_layer_ptr, updated_blocks,
-                               depth_image_for_integration);
+          collectBlocksToClear(T_L_C_refined, camera, tsdf_layer_ptr,
+                               updated_blocks, depth_image_for_integration);
 
       if (!blocks_to_clear.empty()) {
         tsdf_layer_ptr->clearBlocksAsync(blocks_to_clear, *cuda_stream_);
@@ -660,7 +692,7 @@ void Mapper::integrateDepth(const MaskedDepthImageConstView& depth_frame,
                                     cleared_blocks_in_view.end());
   } else if (projective_layer_type_ == ProjectiveLayerType::kOccupancy) {
     occupancy_integrator_.integrateFrame(
-        depth_image_for_integration, T_L_C, camera,
+        depth_image_for_integration, T_L_C_refined, camera,
         layers_.getPtr<OccupancyLayer>(), &updated_blocks);
 
     layers_.getPtr<OccupancyLayer>()->updateGpuHash(*cuda_stream_);
@@ -684,7 +716,7 @@ void Mapper::integrateDepth(const MaskedDepthImageConstView& depth_frame,
     last_depth_image_.value().copyFromAsync(depth_image_for_integration,
                                             *cuda_stream_);
     last_depth_camera_ = camera;
-    last_depth_T_L_C_ = T_L_C;
+    last_depth_T_L_C_ = T_L_C_refined;
   }
 
   blocks_to_update_tracker_.addBlocksToUpdate(blocks_to_signal_updates);
