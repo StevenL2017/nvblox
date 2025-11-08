@@ -44,8 +44,10 @@ using nvblox::Vector3f;
 constexpr int kThreadsPerDim = 16;
 constexpr int kIcpSystemSize = 6;
 constexpr float kNormalEpsilon = 1e-6f;
-constexpr int kMinCorrespondenceCount = 100;
+constexpr int kMinCorrespondenceCount = 200;
 constexpr float kDegToRad = static_cast<float>(M_PI) / 180.0f;
+
+enum class IcpMode { kPointToPlane, kPointToPoint };
 
 __device__ inline bool isValidDepthValue(float depth) {
   return depth > 0.0f && isfinite(depth);
@@ -194,7 +196,7 @@ __global__ void computeNormalsKernel(ImageView<const Vector3f> vertex_view,
   }
 }
 
-__global__ void accumulateNormalEquationsKernel(
+__global__ void accumulatePointToPlaneKernel(
     ImageView<const Vector3f> vertices_obs_C,
     ImageView<const Vector3f> vertices_mod_L,
     ImageView<const Vector3f> normals_mod_L, DepthImageConstView depth_obs,
@@ -259,6 +261,78 @@ __global__ void accumulateNormalEquationsKernel(
   atomicAdd(residual_sums, abs_residual);
   atomicAdd(&counts[0], 1);
   if (abs_residual < depth_threshold_m) {
+    atomicAdd(&counts[1], 1);
+  }
+}
+
+__global__ void accumulatePointToPointKernel(
+    ImageView<const Vector3f> vertices_obs_C,
+    ImageView<const Vector3f> vertices_mod_L,
+    DepthImageConstView depth_obs, DepthImageConstView depth_syn,
+    Transform T_L_C, const float depth_threshold_m,
+    const float huber_delta_m, float* JTJ, float* JTr, float* residual_sums,
+    int* counts) {
+  const int col = blockIdx.x * blockDim.x + threadIdx.x;
+  const int row = blockIdx.y * blockDim.y + threadIdx.y;
+  if (row >= vertices_obs_C.rows() || col >= vertices_obs_C.cols()) {
+    return;
+  }
+
+  const float depth_obs_val = depth_obs(row, col);
+  const float depth_syn_val = depth_syn(row, col);
+  if (!isValidDepthValue(depth_obs_val) ||
+      !isValidDepthValue(depth_syn_val) ||
+      fabsf(depth_obs_val - depth_syn_val) > depth_threshold_m) {
+    return;
+  }
+
+  const Vector3f p_obs_C = vertices_obs_C(row, col);
+  const Vector3f p_mod_L = vertices_mod_L(row, col);
+  if (!isValidVertex(p_obs_C) || !isValidVertex(p_mod_L)) {
+    return;
+  }
+
+  const Vector3f p_obs_L = T_L_C * p_obs_C;
+  const Vector3f residual_vec = p_obs_L - p_mod_L;
+  const float residual_norm = residual_vec.norm();
+  if (!isfinite(residual_norm) || residual_norm < 1e-6f) {
+    return;
+  }
+
+  float weight = 1.0f;
+  if (residual_norm > huber_delta_m) {
+    weight = huber_delta_m / (residual_norm + 1e-6f);
+  }
+
+  const float rot_jacobian[3][3] = {
+      {0.0f, p_obs_L.z(), -p_obs_L.y()},
+      {-p_obs_L.z(), 0.0f, p_obs_L.x()},
+      {p_obs_L.y(), -p_obs_L.x(), 0.0f},
+  };
+
+  for (int row_idx = 0; row_idx < 3; ++row_idx) {
+    float J[kIcpSystemSize];
+    J[0] = rot_jacobian[row_idx][0];
+    J[1] = rot_jacobian[row_idx][1];
+    J[2] = rot_jacobian[row_idx][2];
+    J[3] = (row_idx == 0) ? 1.0f : 0.0f;
+    J[4] = (row_idx == 1) ? 1.0f : 0.0f;
+    J[5] = (row_idx == 2) ? 1.0f : 0.0f;
+
+    const float weighted_residual =
+        weight * residual_vec(row_idx);
+
+    for (int r = 0; r < kIcpSystemSize; ++r) {
+      atomicAdd(&JTr[r], weighted_residual * J[r]);
+      for (int c = 0; c < kIcpSystemSize; ++c) {
+        atomicAdd(&JTJ[r * kIcpSystemSize + c], weight * J[r] * J[c]);
+      }
+    }
+  }
+
+  atomicAdd(residual_sums, residual_norm);
+  atomicAdd(&counts[0], 1);
+  if (residual_norm < depth_threshold_m) {
     atomicAdd(&counts[1], 1);
   }
 }
@@ -466,13 +540,22 @@ bool DepthToTsdfICP::refinePoseAndMask(
   const float correspondence_depth_threshold =
       std::max(config_.overlap_depth_voxel_multiplier * voxel_size_m,
                config_.overlap_depth_min_m);
-  const float huber_delta =
-      std::max(0.5f * correspondence_depth_threshold, 1e-3f);
-
   bool any_valid_level = false;
 
   for (size_t i = 0; i < subsampling_factors.size(); ++i) {
     LevelBuffers& level = level_buffers_[i];
+    const bool use_point_to_point =
+        level.subsampling >= config_.point_to_point_min_subsampling;
+    const IcpMode icp_mode =
+        use_point_to_point ? IcpMode::kPointToPoint : IcpMode::kPointToPlane;
+    const char* mode_name =
+        (icp_mode == IcpMode::kPointToPoint) ? "point-to-point"
+                                             : "point-to-plane";
+    const float base_huber =
+        use_point_to_point ? config_.point_to_point_huber_delta_m
+                           : config_.point_to_plane_huber_delta_m;
+    const float huber_delta = std::max(
+        base_huber, std::max(0.5f * correspondence_depth_threshold, 1e-3f));
 
     // Render the synthetic depth for the current pose.
     sphere_tracer_.renderImageOnGPU(
@@ -484,21 +567,22 @@ bool DepthToTsdfICP::refinePoseAndMask(
 
     level.vertices_mod_L.resizeAsync(level_rows, level_cols, *cuda_stream_);
     {
-      const dim3 threads(kThreadsPerDim, kThreadsPerDim, 1);
-      const dim3 blocks((level_cols + threads.x - 1) / threads.x,
-                        (level_rows + threads.y - 1) / threads.y, 1);
-      depthToVertexMapWorldKernel<<<blocks, threads, 0, *cuda_stream_>>>(
-          DepthImageConstView(level.synthetic_depth), level.camera,
-          current_T, ImageView<Vector3f>(level.vertices_mod_L));
+      const dim3 threads_vec(kThreadsPerDim, kThreadsPerDim, 1);
+      const dim3 blocks_vec((level_cols + threads_vec.x - 1) / threads_vec.x,
+                            (level_rows + threads_vec.y - 1) / threads_vec.y, 1);
+      depthToVertexMapWorldKernel<<<blocks_vec, threads_vec, 0, *cuda_stream_>>>(
+          DepthImageConstView(level.synthetic_depth), level.camera, current_T,
+          ImageView<Vector3f>(level.vertices_mod_L));
       checkCudaErrors(cudaPeekAtLastError());
     }
 
-    level.normals_mod_L.resizeAsync(level_rows, level_cols, *cuda_stream_);
-    {
-      const dim3 threads(kThreadsPerDim, kThreadsPerDim, 1);
-      const dim3 blocks((level_cols + threads.x - 1) / threads.x,
-                        (level_rows + threads.y - 1) / threads.y, 1);
-      computeNormalsKernel<<<blocks, threads, 0, *cuda_stream_>>>(
+    if (icp_mode == IcpMode::kPointToPlane) {
+      level.normals_mod_L.resizeAsync(level_rows, level_cols, *cuda_stream_);
+      const dim3 threads_norm(kThreadsPerDim, kThreadsPerDim, 1);
+      const dim3 blocks_norm(
+          (level_cols + threads_norm.x - 1) / threads_norm.x,
+          (level_rows + threads_norm.y - 1) / threads_norm.y, 1);
+      computeNormalsKernel<<<blocks_norm, threads_norm, 0, *cuda_stream_>>>(
           ImageView<const Vector3f>(level.vertices_mod_L),
           ImageView<Vector3f>(level.normals_mod_L));
       checkCudaErrors(cudaPeekAtLastError());
@@ -523,18 +607,32 @@ bool DepthToTsdfICP::refinePoseAndMask(
       residual_buffer_.setZeroAsync(*cuda_stream_);
       count_buffer_.setZeroAsync(*cuda_stream_);
 
-      const dim3 threads(kThreadsPerDim, kThreadsPerDim, 1);
-      const dim3 blocks((level_cols + threads.x - 1) / threads.x,
-                        (level_rows + threads.y - 1) / threads.y, 1);
-      accumulateNormalEquationsKernel<<<blocks, threads, 0, *cuda_stream_>>>(
-          ImageView<const Vector3f>(level.vertices_obs_C),
-          ImageView<const Vector3f>(level.vertices_mod_L),
-          ImageView<const Vector3f>(level.normals_mod_L),
-          DepthImageConstView(level.depth),
-          DepthImageConstView(level.synthetic_depth), current_T,
-          correspondence_depth_threshold, huber_delta,
-          normal_matrix_buffer_.data(), normal_vector_buffer_.data(),
-          residual_buffer_.data(), count_buffer_.data());
+      const dim3 threads_icp(kThreadsPerDim, kThreadsPerDim, 1);
+      const dim3 blocks_icp(
+          (level_cols + threads_icp.x - 1) / threads_icp.x,
+          (level_rows + threads_icp.y - 1) / threads_icp.y, 1);
+      if (icp_mode == IcpMode::kPointToPlane) {
+        accumulatePointToPlaneKernel<<<blocks_icp, threads_icp, 0,
+                                       *cuda_stream_>>>(
+            ImageView<const Vector3f>(level.vertices_obs_C),
+            ImageView<const Vector3f>(level.vertices_mod_L),
+            ImageView<const Vector3f>(level.normals_mod_L),
+            DepthImageConstView(level.depth),
+            DepthImageConstView(level.synthetic_depth), current_T,
+            correspondence_depth_threshold, huber_delta,
+            normal_matrix_buffer_.data(), normal_vector_buffer_.data(),
+            residual_buffer_.data(), count_buffer_.data());
+      } else {
+        accumulatePointToPointKernel<<<blocks_icp, threads_icp, 0,
+                                       *cuda_stream_>>>(
+            ImageView<const Vector3f>(level.vertices_obs_C),
+            ImageView<const Vector3f>(level.vertices_mod_L),
+            DepthImageConstView(level.depth),
+            DepthImageConstView(level.synthetic_depth), current_T,
+            correspondence_depth_threshold, huber_delta,
+            normal_matrix_buffer_.data(), normal_vector_buffer_.data(),
+            residual_buffer_.data(), count_buffer_.data());
+      }
       checkCudaErrors(cudaPeekAtLastError());
 
       cuda_stream_->synchronize();
@@ -543,8 +641,9 @@ bool DepthToTsdfICP::refinePoseAndMask(
       const int inliers = count_buffer_[1];
       if (total_correspondences < kMinCorrespondenceCount) {
         std::cout << "[DepthToTsdfICP] Skip level (insufficient correspondences="
-                  << total_correspondences << ") at level_subsampling="
-                  << level.subsampling << ", iteration=" << iter << std::endl;
+                  << total_correspondences << ", mode=" << mode_name
+                  << ") at level_subsampling=" << level.subsampling
+                  << ", iteration=" << iter << std::endl;
         break;
       }
       any_valid_level = true;
@@ -562,7 +661,8 @@ bool DepthToTsdfICP::refinePoseAndMask(
       if (ldlt.info() != Eigen::Success) {
         std::cout << "[DepthToTsdfICP] Reject: normal equation solve failed at "
                      "level_subsampling="
-                  << level.subsampling << ", iteration=" << iter << std::endl;
+                  << level.subsampling << ", iteration=" << iter
+                  << ", mode=" << mode_name << std::endl;
         return false;
       }
       Eigen::Matrix<float, kIcpSystemSize, 1> delta =
