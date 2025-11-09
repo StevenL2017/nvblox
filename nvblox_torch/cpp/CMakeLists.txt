@@ -25,6 +25,7 @@ add_nvblox_shared_library(
   src/sdf_query.cu
   src/py_layer.cpp
   src/py_mesh.cpp
+  src/py_multi_mapper.cu
   src/py_mapper_params.cpp
   src/cuda_stream.cpp
   src/py_rendering.cpp

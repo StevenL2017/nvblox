@@ -10,6 +10,7 @@
  */
 
 #include "nvblox_torch/py_mapper.h"
+#include "nvblox_torch/py_multi_mapper.h"
 
 #include <torch/script.h>
 
@@ -398,6 +399,16 @@ TORCH_LIBRARY(pynvblox, m) {
       .def("num_mappers", &Mapper::getNumMappers)
       // Benchmarking
       .def("print_timing", &Mapper::printTiming);
+
+  m.class_<MultiMapper>("MultiMapper")
+      .def(torch::init<double, std::string, std::string,
+                       c10::intrusive_ptr<MapperParams>,
+                       c10::optional<c10::intrusive_ptr<MapperParams>>>())
+      .def("integrate_depth", &MultiMapper::integrateDepth)
+      .def("integrate_color", &MultiMapper::integrateColor)
+      .def("update_color_mesh", &MultiMapper::updateColorMesh)
+      .def("get_delta_block_mesh", &MultiMapper::getDeltaBlockMesh)
+      .def("get_color_mesh", &MultiMapper::getColorMesh);
 
   m.class_<Scene>("Scene")
       .def(torch::init())
