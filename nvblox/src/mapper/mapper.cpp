@@ -20,6 +20,7 @@ limitations under the License.
 #include <cmath>
 #include <iostream>
 #include <limits>
+#include <optional>
 #include <utility>
 
 #include "nvblox/core/indexing.h"
@@ -30,22 +31,165 @@ limitations under the License.
 
 namespace nvblox {
 
-std::vector<Index3D> Mapper::collectBlocksToAdd(
-    TsdfLayer* tsdf_layer_ptr, const std::vector<Index3D>& updated_blocks) {
-  std::vector<Index3D> blocks_to_add;
-  if (tsdf_layer_ptr == nullptr || updated_blocks.empty()) {
-    return blocks_to_add;
+namespace {
+
+struct BlockImageBounds {
+  int min_row_px;
+  int max_row_px;
+  int min_col_px;
+  int max_col_px;
+  float block_far_depth;
+};
+
+std::optional<BlockImageBounds> computeBlockImageBounds(
+    const Index3D& block_index, float block_size,
+    const Eigen::Matrix3f& rotation_C_L,
+    const Eigen::Vector3f& translation_C_L, const Camera& camera,
+    int image_rows, int image_cols) {
+  const float half_block = 0.5f * block_size;
+  const Vector3f block_center_L =
+      getCenterPositionFromBlockIndex(block_size, block_index);
+
+  float min_col = static_cast<float>(camera.width());
+  float max_col = 0.0f;
+  float min_row = static_cast<float>(camera.height());
+  float max_row = 0.0f;
+  float block_far_depth = -std::numeric_limits<float>::infinity();
+  bool has_projected_corner = false;
+
+  for (int dx = -1; dx <= 1; dx += 2) {
+    for (int dy = -1; dy <= 1; dy += 2) {
+      for (int dz = -1; dz <= 1; dz += 2) {
+        const Vector3f corner_L =
+            block_center_L +
+            Vector3f(dx * half_block, dy * half_block, dz * half_block);
+        const Vector3f corner_C = rotation_C_L * corner_L + translation_C_L;
+
+        block_far_depth = std::max(block_far_depth, corner_C.z());
+        if (corner_C.z() <= 0.0f) {
+          continue;
+        }
+
+        has_projected_corner = true;
+        const float inv_z = 1.0f / corner_C.z();
+        const float col = camera.fu() * corner_C.x() * inv_z + camera.cu();
+        const float row = camera.fv() * corner_C.y() * inv_z + camera.cv();
+
+        min_col = std::min(min_col, col);
+        max_col = std::max(max_col, col);
+        min_row = std::min(min_row, row);
+        max_row = std::max(max_row, row);
+      }
+    }
   }
 
-  blocks_to_add.reserve(updated_blocks.size());
+  if (!has_projected_corner || !std::isfinite(block_far_depth) ||
+      block_far_depth <= 0.0f) {
+    return std::nullopt;
+  }
+
+  min_col = std::clamp(min_col, 0.0f, static_cast<float>(image_cols - 1));
+  max_col = std::clamp(max_col, 0.0f, static_cast<float>(image_cols - 1));
+  min_row = std::clamp(min_row, 0.0f, static_cast<float>(image_rows - 1));
+  max_row = std::clamp(max_row, 0.0f, static_cast<float>(image_rows - 1));
+
+  if (max_col < min_col || max_row < min_row) {
+    return std::nullopt;
+  }
+
+  BlockImageBounds bounds;
+  bounds.min_col_px = static_cast<int>(std::floor(min_col));
+  bounds.max_col_px = static_cast<int>(std::ceil(max_col));
+  bounds.min_row_px = static_cast<int>(std::floor(min_row));
+  bounds.max_row_px = static_cast<int>(std::ceil(max_row));
+  bounds.block_far_depth = block_far_depth;
+  return bounds;
+}
+
+}  // namespace
+
+std::vector<Index3D> Mapper::collectBlocksToAdd(
+    TsdfLayer* tsdf_layer_ptr, const std::vector<Index3D>& updated_blocks,
+    const MaskedDepthImageConstView& depth_frame, const Transform& T_L_C,
+    const Camera& camera) {
+  std::vector<Index3D> blocks_with_active_pixels;
+  if (tsdf_layer_ptr == nullptr || updated_blocks.empty() ||
+      depth_frame.rows() == 0 || depth_frame.cols() == 0) {
+    return blocks_with_active_pixels;
+  }
+
+  CudaStream* cuda_stream = CHECK_NOTNULL(cuda_stream_.get());
+  DepthImage depth_frame_host(MemoryType::kHost);
+  depth_frame_host.copyFromAsync(depth_frame, *cuda_stream);
+
+  const bool has_mask = depth_frame.hasMask();
+  const MaskMode mask_mode = depth_frame.mode();
+  MonoImage mask_host(MemoryType::kHost);
+  if (has_mask) {
+    mask_host.copyFromAsync(depth_frame.mask(), *cuda_stream);
+  }
+
+  cuda_stream->synchronize();
+
+  auto pixel_is_active = [&](int row, int col) -> bool {
+    if (!has_mask) {
+      return true;
+    }
+    const uint8_t mask_value = mask_host(row, col);
+    if (mask_mode == MaskMode::kNonInverted) {
+      return mask_value != 0;
+    }
+    return mask_value == 0;
+  };
+
+  const Transform T_C_L = T_L_C.inverse();
+  const Eigen::Matrix3f rotation_C_L = T_C_L.rotation();
+  const Eigen::Vector3f translation_C_L = T_C_L.translation();
+  const int image_rows = depth_frame.rows();
+  const int image_cols = depth_frame.cols();
+  const float block_size = tsdf_layer_ptr->block_size();
+
+  blocks_with_active_pixels.reserve(updated_blocks.size());
   for (const Index3D& block_index : updated_blocks) {
     if (!tsdf_layer_ptr->isBlockAllocated(block_index)) {
       continue;
     }
-    blocks_to_add.push_back(block_index);
+
+    const std::optional<BlockImageBounds> bounds =
+        computeBlockImageBounds(block_index, block_size, rotation_C_L,
+                                translation_C_L, camera, image_rows,
+                                image_cols);
+    if (!bounds.has_value()) {
+      continue;
+    }
+
+    bool has_active_pixel = false;
+    for (int row = bounds->min_row_px;
+         row <= bounds->max_row_px && !has_active_pixel; ++row) {
+      const int clamped_row = std::clamp(row, 0, image_rows - 1);
+      for (int col = bounds->min_col_px; col <= bounds->max_col_px; ++col) {
+        const int clamped_col = std::clamp(col, 0, image_cols - 1);
+
+        if (!pixel_is_active(clamped_row, clamped_col)) {
+          continue;
+        }
+
+        const float depth_value = depth_frame_host(clamped_row, clamped_col);
+        if (!std::isfinite(depth_value) || depth_value <= 0.0f) {
+          continue;
+        }
+
+        has_active_pixel = true;
+        break;
+      }
+    }
+
+    if (has_active_pixel) {
+      blocks_with_active_pixels.push_back(block_index);
+    }
   }
 
-  return blocks_to_add;
+  return blocks_with_active_pixels;
 }
 
 std::vector<Index3D> filterBlocksWithOcclusion(
@@ -66,7 +210,6 @@ std::vector<Index3D> filterBlocksWithOcclusion(
   const Eigen::Vector3f translation_C_L = T_C_L.translation();
   const int image_rows = depth_frame.rows();
   const int image_cols = depth_frame.cols();
-  const float half_block = 0.5f * block_size;
   constexpr float kOcclusionEpsilon = 1e-4f;
 
   DepthImage depth_frame_host(MemoryType::kHost);
@@ -98,64 +241,19 @@ std::vector<Index3D> filterBlocksWithOcclusion(
       continue;
     }
 
-    const Vector3f block_center_L =
-        getCenterPositionFromBlockIndex(block_size, block_index);
-
-    float min_col = static_cast<float>(camera.width());
-    float max_col = 0.0f;
-    float min_row = static_cast<float>(camera.height());
-    float max_row = 0.0f;
-    float block_far_depth = -std::numeric_limits<float>::infinity();
-    bool has_projected_corner = false;
-
-    for (int dx = -1; dx <= 1; dx += 2) {
-      for (int dy = -1; dy <= 1; dy += 2) {
-        for (int dz = -1; dz <= 1; dz += 2) {
-          const Vector3f corner_L =
-              block_center_L +
-              Vector3f(dx * half_block, dy * half_block, dz * half_block);
-          const Vector3f corner_C = rotation_C_L * corner_L + translation_C_L;
-
-          block_far_depth = std::max(block_far_depth, corner_C.z());
-          if (corner_C.z() <= 0.0f) {
-            continue;
-          }
-
-          has_projected_corner = true;
-          const float inv_z = 1.0f / corner_C.z();
-          const float col = camera.fu() * corner_C.x() * inv_z + camera.cu();
-          const float row = camera.fv() * corner_C.y() * inv_z + camera.cv();
-
-          min_col = std::min(min_col, col);
-          max_col = std::max(max_col, col);
-          min_row = std::min(min_row, row);
-          max_row = std::max(max_row, row);
-        }
-      }
-    }
-
-    if (!has_projected_corner || !std::isfinite(block_far_depth) ||
-        block_far_depth <= 0.0f) {
+    const std::optional<BlockImageBounds> bounds =
+        computeBlockImageBounds(block_index, block_size, rotation_C_L,
+                                translation_C_L, camera, image_rows,
+                                image_cols);
+    if (!bounds.has_value()) {
       continue;
     }
 
-    min_col =
-        std::clamp(min_col, 0.0f, static_cast<float>(image_cols - 1));
-    max_col =
-        std::clamp(max_col, 0.0f, static_cast<float>(image_cols - 1));
-    min_row =
-        std::clamp(min_row, 0.0f, static_cast<float>(image_rows - 1));
-    max_row =
-        std::clamp(max_row, 0.0f, static_cast<float>(image_rows - 1));
-
-    if (max_col < min_col || max_row < min_row) {
-      continue;
-    }
-
-    const int min_col_px = static_cast<int>(std::floor(min_col));
-    const int max_col_px = static_cast<int>(std::ceil(max_col));
-    const int min_row_px = static_cast<int>(std::floor(min_row));
-    const int max_row_px = static_cast<int>(std::ceil(max_row));
+    const int min_col_px = bounds->min_col_px;
+    const int max_col_px = bounds->max_col_px;
+    const int min_row_px = bounds->min_row_px;
+    const int max_row_px = bounds->max_row_px;
+    const float block_far_depth = bounds->block_far_depth;
 
     bool occluded = false;
     bool has_free_measurement = false;
@@ -665,8 +763,9 @@ void Mapper::integrateDepth(const MaskedDepthImageConstView& depth_frame,
         tsdf_layer_ptr, &updated_blocks);
 
     if (add_observed_blocks_in_fov_) {
-      blocks_to_add =
-          collectBlocksToAdd(tsdf_layer_ptr, updated_blocks);
+      blocks_to_add = 
+          collectBlocksToAdd(tsdf_layer_ptr, updated_blocks,
+                             depth_image_for_integration, T_L_C_refined, camera);
     }
 
     if (clear_unobserved_blocks_in_fov_) {

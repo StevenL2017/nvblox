@@ -709,7 +709,9 @@ class Mapper : public MapperBase {
   /// Collect TSDF blocks that were newly updated and already allocated.
   std::vector<Index3D> collectBlocksToAdd(
       TsdfLayer* tsdf_layer_ptr,
-      const std::vector<Index3D>& updated_blocks);
+      const std::vector<Index3D>& updated_blocks,
+      const MaskedDepthImageConstView& depth_frame, const Transform& T_L_C,
+      const Camera& camera);
 
   /// Collect TSDF blocks to clear using occlusion-aware filtering.
   std::vector<Index3D> collectBlocksToClear(
