@@ -22,7 +22,7 @@ limitations under the License.
 namespace nvblox {
 
 struct MeshBlockOptimizerOptions {
-  bool enabled = true;
+  bool enabled = false;
   float min_triangle_area_m2 = 0.0f;
   float max_edge_length_m = 0.0f;
   float max_aspect_ratio = 0.0f;

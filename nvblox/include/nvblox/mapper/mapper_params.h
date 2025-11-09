@@ -59,7 +59,7 @@ constexpr Param<bool>::Description kClearUnobservedBlocksInFovParamDesc{
 
 // ======= MESH OPTIMIZATION =======
 constexpr Param<bool>::Description kMeshOptimizerEnableParamDesc{
-    "mesh_optimizer_enable", true,
+    "mesh_optimizer_enable", false,
     "Enable block-level mesh post processing and simplification."};
 constexpr Param<float>::Description kMeshOptimizerMinTriangleAreaFactorParamDesc{
     "mesh_optimizer_min_triangle_area_factor", 0.01f,
