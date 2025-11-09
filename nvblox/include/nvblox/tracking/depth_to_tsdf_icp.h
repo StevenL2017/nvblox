@@ -49,9 +49,9 @@ class DepthToTsdfICP {
     /// ICP iteration budget per level (same order as factors).
     std::vector<int> iterations_per_level = {16, 8};
     /// Point-to-plane Huber loss width (meters).
-    float point_to_plane_huber_delta_m = 0.03f;
+    float point_to_plane_huber_delta_m = 0.01f;
     /// Point-to-point Huber loss width (meters).
-    float point_to_point_huber_delta_m = 0.05f;
+    float point_to_point_huber_delta_m = 0.01f;
     /// Use point-to-point residuals for pyramid levels whose subsampling factor
     /// is greater-or-equal to this value (set <= 1 to disable point-to-plane).
     int point_to_point_min_subsampling = 1;
@@ -63,11 +63,11 @@ class DepthToTsdfICP {
     float max_step_norm = 0.15f;
     /// Depth threshold multiplier relative to voxel size used when masking
     /// overlapping pixels as well as for correspondence rejection.
-    float overlap_depth_voxel_multiplier = 0.1f;
+    float overlap_depth_voxel_multiplier = 3.0f;
     /// Minimum absolute overlap threshold (meters).
     float overlap_depth_min_m = 0.01f;
     /// Maximum angle in degrees between observed/model normals for masking.
-    float overlap_normal_threshold_deg = 1.0f;
+    float overlap_normal_threshold_deg = 15.0f;
   };
 
   explicit DepthToTsdfICP(std::shared_ptr<CudaStream> cuda_stream);
