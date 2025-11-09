@@ -63,11 +63,11 @@ class DepthToTsdfICP {
     float max_step_norm = 0.15f;
     /// Depth threshold multiplier relative to voxel size used when masking
     /// overlapping pixels as well as for correspondence rejection.
-    float overlap_depth_voxel_multiplier = 2.5f;
+    float overlap_depth_voxel_multiplier = 0.1f;
     /// Minimum absolute overlap threshold (meters).
     float overlap_depth_min_m = 0.01f;
     /// Maximum angle in degrees between observed/model normals for masking.
-    float overlap_normal_threshold_deg = 15.0f;
+    float overlap_normal_threshold_deg = 1.0f;
   };
 
   explicit DepthToTsdfICP(std::shared_ptr<CudaStream> cuda_stream);
