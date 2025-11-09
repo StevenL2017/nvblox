@@ -45,20 +45,20 @@ class DepthToTsdfICP {
  public:
   struct Config {
     /// Pyramid subsampling factors, processed from coarse to fine.
-    std::vector<int> pyramid_subsampling_factors = {4, 2, 1};
+    std::vector<int> pyramid_subsampling_factors = {2, 1};
     /// ICP iteration budget per level (same order as factors).
-    std::vector<int> iterations_per_level = {6, 4, 4};
+    std::vector<int> iterations_per_level = {16, 8};
     /// Point-to-plane Huber loss width (meters).
-    float point_to_plane_huber_delta_m = 0.02f;
+    float point_to_plane_huber_delta_m = 0.03f;
     /// Point-to-point Huber loss width (meters).
-    float point_to_point_huber_delta_m = 0.02f;
+    float point_to_point_huber_delta_m = 0.05f;
     /// Use point-to-point residuals for pyramid levels whose subsampling factor
-    /// is greater-or-equal to this value (set <= 1 to disable point-to-point).
+    /// is greater-or-equal to this value (set <= 1 to disable point-to-plane).
     int point_to_point_min_subsampling = 1;
     /// Maximum accepted mean absolute residual (meters).
-    float max_mean_residual_m = 0.05f;
+    float max_mean_residual_m = 0.015f;
     /// Minimum fraction of inliers required to accept the result.
-    float min_inlier_ratio = 0.15f;
+    float min_inlier_ratio = 0.5f;
     /// Maximum norm of the 6-DoF update (rad/ meters) per Gauss-Newton step.
     float max_step_norm = 0.15f;
     /// Depth threshold multiplier relative to voxel size used when masking
