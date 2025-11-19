@@ -9,11 +9,11 @@ dependencies = [
     "imageio>=2.35.0",
     "numpy",
     "open3d",
-    "torchvision==0.19",
+    "torchvision>=0.19",
     "timm",
     "opencv-python",
     "einops",
-    "torch==2.4",
+    "torch>=2.4",
     "nvtx",
 ]
 
